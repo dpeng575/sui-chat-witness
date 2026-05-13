@@ -1,0 +1,12 @@
+{
+  "name": "sui-chat-witness-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "chat-witness-chrome-plugin"
+  ],
+  "scripts": {
+    "dev:chrome": "cd chat-witness-chrome-plugin && npm run dev",
+    "build:chrome": "cd chat-witness-chrome-plugin && npm run build"
+  }
+}
