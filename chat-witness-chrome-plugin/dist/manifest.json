@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Sui-Seal: AI 对话存证",
+  "version": "0.1.0",
+  "description": "一键将 AI 对话永久存证到 Sui 区块链，支持跨平台迁移和导出",
+  "permissions": [
+    "storage",
+    "identity",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "https://kimi.moonshot.cn/*"
+  ],
+  "action": {
+    "default_popup": "index.html",
+    "default_width": 360,
+    "default_height": 600
+  },
+  "background": {
+    "service_worker": "service-worker-loader.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "assets/index.tsx-CeACLAXK.js"
+      ],
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://kimi.moonshot.cn/*"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://kimi.moonshot.cn/*"
+      ],
+      "resources": [
+        "assets/index.tsx-CeACLAXK.js"
+      ],
+      "use_dynamic_url": false
+    }
+  ]
+}
