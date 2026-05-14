@@ -1,7 +1,75 @@
+
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { conversationToMarkdown, downloadMarkdown, generateFilename } from '../utils/export';
+import type { Conversation } from '../adapters/interface';
 
 function App() {
   const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const [currentPlatform, setCurrentPlatform] = useState<string | null>(null);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    detectCurrentPlatform();
+  }, []);
+
+  async function detectCurrentPlatform() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return;
+
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'detectPlatform' });
+      if (response?.success) {
+        setCurrentPlatform(response.platform);
+      }
+    } catch (e) {
+      console.log('Could not detect platform:', e);
+    }
+  }
+
+  async function extractConversation() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) {
+      showStatus('No active tab found', 'error');
+      return;
+    }
+
+    setIsExtracting(true);
+    setStatusMessage(null);
+
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractConversation' });
+      if (response?.success && response.conversation) {
+        setConversation(response.conversation);
+        showStatus('Conversation extracted successfully!', 'success');
+      } else {
+        showStatus(response?.error || 'Could not extract conversation', 'error');
+      }
+    } catch (e) {
+      showStatus('Could not connect to page. Please refresh the page and try again.', 'error');
+    } finally {
+      setIsExtracting(false);
+    }
+  }
+
+  async function exportToMarkdown() {
+    if (!conversation) {
+      showStatus('No conversation to export', 'error');
+      return;
+    }
+
+    const markdown = conversationToMarkdown(conversation);
+    const filename = generateFilename(conversation);
+    downloadMarkdown(markdown, filename);
+    showStatus('Conversation exported successfully!', 'success');
+  }
+
+  function showStatus(text: string, type: 'success' | 'error' = 'success') {
+    setStatusMessage({ text, type });
+    setTimeout(() => setStatusMessage(null), 3000);
+  }
 
   if (loading) {
     return (
@@ -11,7 +79,6 @@ function App() {
     );
   }
 
-  // 未登录状态
   if (!user) {
     return (
       <div className="w-full min-h-screen bg-gray-50 p-4">
@@ -49,10 +116,8 @@ function App() {
     );
   }
 
-  // 已登录状态
   return (
     <div className="w-full min-h-screen bg-gray-50 p-4">
-      {/* 用户信息 */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           {user.avatarUrl ? (
@@ -81,64 +146,71 @@ function App() {
         </button>
       </div>
 
-      {/* 平台检测提示 */}
+      {statusMessage && (
+        <div className={`mb-4 p-3 rounded-lg text-sm ${
+          statusMessage.type === 'error'
+            ? 'bg-red-50 text-red-700 border border-red-200'
+            : 'bg-green-50 text-green-700 border border-green-200'
+        }`}>
+          {statusMessage.text}
+        </div>
+      )}
+
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-        <div className="text-sm text-blue-800 font-medium mb-1">🦭 Sui-Seal 已就绪</div>
+        <div className="text-sm text-blue-800 font-medium mb-1">🦭 Sui-Seal</div>
         <div className="text-xs text-blue-600">
-          正在检测当前页面...
+          {currentPlatform
+            ? `已检测到: ${currentPlatform}`
+            : '请在 AI 对话页面使用此插件'}
         </div>
       </div>
 
-      {/* 功能按钮 */}
       <div className="space-y-3">
         <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
-          迁移对话
+          对话操作
         </div>
-        <button className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-          <span>🔄</span>
-          迁移到 Claude
-        </button>
-        <button className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-          <span>🔄</span>
-          迁移到 Gemini
-        </button>
-        <button className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-          <span>🔄</span>
-          迁移到 Kimi
+
+        <button
+          onClick={extractConversation}
+          disabled={isExtracting || !currentPlatform}
+          className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
+          <span>{isExtracting ? '⏳' : '📥'}</span>
+          {isExtracting ? '提取中...' : '提取当前对话'}
         </button>
 
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
-          导出
-        </div>
-        <button className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-          <span>📄</span>
-          导出 Markdown
-        </button>
-        <button className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
-          <span>📄</span>
-          导出 PDF
-        </button>
+        {conversation && (
+          <>
+            <button
+              onClick={exportToMarkdown}
+              className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <span>📄</span>
+              导出 Markdown
+            </button>
+
+            <div className="bg-gray-100 rounded-lg p-3">
+              <div className="text-xs font-medium text-gray-500 mb-2">已提取对话</div>
+              <div className="text-sm text-gray-700 truncate">{conversation.title}</div>
+              <div className="text-xs text-gray-500">{conversation.messages.length} 条消息</div>
+            </div>
+          </>
+        )}
 
         <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
           区块链存证
         </div>
-        <button className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2">
+        <button
+          disabled={!conversation}
+          className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+        >
           <span>🔐</span>
-          存证到 Sui 链
+          存证到 Sui 链（Coming Soon）
         </button>
-      </div>
-
-      {/* 最近存证 */}
-      <div className="mt-6 pt-4 border-t border-gray-200">
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
-          最近存证
-        </div>
-        <div className="text-sm text-gray-400 text-center py-4">
-          暂无存证记录
-        </div>
       </div>
     </div>
   );
 }
 
 export default App;
+
