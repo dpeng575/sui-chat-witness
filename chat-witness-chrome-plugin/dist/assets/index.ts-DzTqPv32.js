@@ -1,1 +1,0 @@
-console.log("Sui-Seal background script loaded");chrome.runtime.onInstalled.addListener(()=>{console.log("Sui-Seal extension installed")});chrome.runtime.onMessage.addListener((e,n,o)=>{console.log("Background received message:",e),o({received:!0})});
