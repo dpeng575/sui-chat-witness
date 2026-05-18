@@ -41,13 +41,19 @@ function App() {
 
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractConversation' });
+      console.log('[Popup] Received response:', response);
       if (response?.success && response.conversation) {
+        console.log('[Popup] Conversation messages:', response.conversation.messages);
+        response.conversation.messages.forEach((msg: any, idx: number) => {
+          console.log(`[Popup] Msg ${idx}: hasImage=${msg.content.includes('![')}`, msg.content.substring(0, 200));
+        });
         setConversation(response.conversation);
         showStatus('Conversation extracted successfully!', 'success');
       } else {
         showStatus(response?.error || 'Could not extract conversation', 'error');
       }
     } catch (e) {
+      console.log('[Popup] Error:', e);
       showStatus('Could not connect to page. Please refresh the page and try again.', 'error');
     } finally {
       setIsExtracting(false);
@@ -60,7 +66,9 @@ function App() {
       return;
     }
 
+    console.log('[Popup] Exporting conversation:', conversation);
     const markdown = conversationToMarkdown(conversation);
+    console.log('[Popup] Generated markdown:', markdown);
     const filename = generateFilename(conversation);
     downloadMarkdown(markdown, filename);
     showStatus('Conversation exported successfully!', 'success');
@@ -74,7 +82,7 @@ function App() {
   if (loading) {
     return (
       <div className="w-full min-h-screen bg-gray-50 p-4 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
       </div>
     );
   }
@@ -101,16 +109,6 @@ function App() {
             </svg>
             使用 Google 账号登录
           </button>
-
-          <div className="text-xs text-gray-400 text-center mt-4">
-            <p>登录后即可使用所有功能：</p>
-            <ul className="mt-2 space-y-1 text-left">
-              <li>• 一键跨平台对话迁移</li>
-              <li>• 永久区块链存证</li>
-              <li>• 对话历史搜索与管理</li>
-              <li>• 多格式导出</li>
-            </ul>
-          </div>
         </div>
       </div>
     );
@@ -213,4 +211,3 @@ function App() {
 }
 
 export default App;
-
