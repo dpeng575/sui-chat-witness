@@ -71,20 +71,24 @@ export async function trackActivity(
   platform?: string,
   metadata?: Record<string, unknown>
 ): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
-  const { error } = await supabase
-    .from('user_activity')
-    .upsert({
-      activity_date: today,
-      activity_type: activityType,
-      platform,
-      metadata,
-    }, {
-      onConflict: 'user_id, activity_date, activity_type'
-    });
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { error } = await supabase
+      .from('user_activity')
+      .upsert({
+        activity_date: today,
+        activity_type: activityType,
+        platform,
+        metadata,
+      }, {
+        onConflict: 'user_id, activity_date, activity_type'
+      });
 
-  if (error) {
-    console.error('Error tracking activity:', error);
+    if (error) {
+      console.warn('Error tracking activity (non-critical):', error);
+    }
+  } catch (e) {
+    console.warn('Failed to track activity (non-critical):', e);
   }
 }
 

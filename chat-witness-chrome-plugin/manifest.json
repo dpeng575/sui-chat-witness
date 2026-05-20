@@ -8,7 +8,9 @@
     "https://chat.openai.com/*",
     "https://claude.ai/*",
     "https://gemini.google.com/*",
-    "https://kimi.moonshot.cn/*"
+    "https://kimi.moonshot.cn/*",
+    "https://salt.api.mystenlabs.com/*",
+    "https://prover.mystenlabs.com/*"
   ],
   "action": {
     "default_popup": "index.html",

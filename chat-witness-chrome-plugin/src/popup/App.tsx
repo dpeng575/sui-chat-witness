@@ -1,19 +1,27 @@
-
 import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { useWallet } from '../hooks/useWallet';
 import { conversationToMarkdown, downloadMarkdown, generateFilename } from '../utils/export';
+import { createWitness } from '../lib/witness';
 import type { Conversation } from '../adapters/interface';
 
 function App() {
   const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const { connected, address, detectWallets, connect, disconnect, signAndExecuteTransaction } = useWallet();
   const [currentPlatform, setCurrentPlatform] = useState<string | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isWitnessing, setIsWitnessing] = useState(false);
+  const [witnessResult, setWitnessResult] = useState<any>(null);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [wallets, setWallets] = useState<any[]>([]);
+  const [showWallets, setShowWallets] = useState(false);
 
   useEffect(() => {
     detectCurrentPlatform();
-  }, []);
+    const availableWallets = detectWallets();
+    setWallets(availableWallets);
+  }, [detectWallets]);
 
   async function detectCurrentPlatform() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -43,10 +51,6 @@ function App() {
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractConversation' });
       console.log('[Popup] Received response:', response);
       if (response?.success && response.conversation) {
-        console.log('[Popup] Conversation messages:', response.conversation.messages);
-        response.conversation.messages.forEach((msg: any, idx: number) => {
-          console.log(`[Popup] Msg ${idx}: hasImage=${msg.content.includes('![')}`, msg.content.substring(0, 200));
-        });
         setConversation(response.conversation);
         showStatus('Conversation extracted successfully!', 'success');
       } else {
@@ -72,6 +76,48 @@ function App() {
     const filename = generateFilename(conversation);
     downloadMarkdown(markdown, filename);
     showStatus('Conversation exported successfully!', 'success');
+  }
+
+  async function witnessToChain() {
+    if (!conversation) {
+      showStatus('No conversation to witness', 'error');
+      return;
+    }
+
+    if (!connected || !address) {
+      showStatus('Please connect a wallet first', 'error');
+      setShowWallets(true);
+      return;
+    }
+
+    setIsWitnessing(true);
+    setWitnessResult(null);
+    setStatusMessage(null);
+
+    try {
+      showStatus('Creating witness... This may take a few seconds.', 'success');
+
+      const result = await createWitness(
+        conversation.messages,
+        conversation.platform,
+        { address, signAndExecuteTransaction },
+        conversation.title,
+        conversation.url
+      );
+
+      setWitnessResult(result);
+
+      if (result.success) {
+        showStatus('Witness created successfully!', 'success');
+      } else {
+        showStatus(result.error || 'Failed to create witness', 'error');
+      }
+    } catch (error) {
+      console.error('[Popup] Witness error:', error);
+      showStatus('Failed to create witness', 'error');
+    } finally {
+      setIsWitnessing(false);
+    }
   }
 
   function showStatus(text: string, type: 'success' | 'error' = 'success') {
@@ -161,6 +207,14 @@ function App() {
             ? `已检测到: ${currentPlatform}`
             : '请在 AI 对话页面使用此插件'}
         </div>
+        {connected && address && (
+          <div className="mt-2 pt-2 border-t border-blue-200">
+            <div className="text-xs text-blue-700 font-medium">已连接钱包:</div>
+            <div className="text-xs text-blue-600 font-mono mt-1 truncate" title={address}>
+              {address.substring(0, 10)}...{address.substring(address.length - 8)}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -196,15 +250,108 @@ function App() {
         )}
 
         <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
+          钱包操作
+        </div>
+
+        {!connected ? (
+          <>
+            <button
+              onClick={() => setShowWallets(!showWallets)}
+              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <span>🔗</span>
+              连接钱包
+            </button>
+
+            {showWallets && wallets.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
+                <div className="text-xs font-medium text-gray-500">选择钱包:</div>
+                {wallets.map((wallet, index) => (
+                  <button
+                    key={index}
+                    onClick={async () => {
+                      await connect(wallet);
+                      setShowWallets(false);
+                    }}
+                    className="w-full py-2 px-3 text-left text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                  >
+                    {wallet.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {showWallets && wallets.length === 0 && (
+              <div className="bg-gray-100 rounded-lg p-3 text-xs text-gray-600">
+                未检测到钱包，请安装 Sui Wallet、Slush 或其他 Sui 钱包插件
+              </div>
+            )}
+          </>
+        ) : (
+          <button
+            onClick={disconnect}
+            className="w-full py-2.5 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <span>✕</span>
+            断开钱包
+          </button>
+        )}
+
+        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
           区块链存证
         </div>
         <button
-          disabled={!conversation}
+          onClick={witnessToChain}
+          disabled={!conversation || !connected || isWitnessing}
           className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         >
-          <span>🔐</span>
-          存证到 Sui 链（Coming Soon）
+          <span>{isWitnessing ? '⏳' : '🔐'}</span>
+          {isWitnessing ? '存证中...' : '存证到 Sui 链'}
         </button>
+
+        {witnessResult && (
+          <div className={`rounded-lg p-3 mt-3 ${
+            witnessResult.success
+              ? 'bg-green-50 border border-green-200'
+              : 'bg-red-50 border border-red-200'
+          }`}>
+            <div className={`text-sm font-medium mb-2 ${
+              witnessResult.success ? 'text-green-800' : 'text-red-800'
+            }`}>
+              {witnessResult.success ? '存证成功!' : '存证失败'}
+            </div>
+            {witnessResult.success && witnessResult.suiTransactionDigest && (
+              <div className="space-y-1">
+                <div className="text-xs text-green-700">
+                  <span className="font-medium">交易:</span>
+                  <a
+                    href={`https://suiscan.xyz/testnet/tx/${witnessResult.suiTransactionDigest}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-green-600 underline ml-1"
+                  >
+                    {witnessResult.suiTransactionDigest.substring(0, 16)}...
+                  </a>
+                </div>
+                {witnessResult.walrusBlobId && (
+                  <div className="text-xs text-green-700">
+                    <span className="font-medium">Walrus:</span>
+                    <span className="font-mono ml-1">{witnessResult.walrusBlobId.substring(0, 16)}...</span>
+                  </div>
+                )}
+                {witnessResult.conversationHash && (
+                  <div className="text-xs text-green-700">
+                    <span className="font-medium">哈希:</span>
+                    <span className="font-mono ml-1">{witnessResult.conversationHash.substring(0, 16)}...</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {!witnessResult.success && witnessResult.error && (
+              <div className="text-xs text-red-700">{witnessResult.error}</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
