@@ -15,7 +15,12 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["chrome"]
+    "types": ["chrome"],
+    "baseUrl": ".",
+    "paths": {
+      "@mysten/sui": ["../node_modules/@mysten/sui"],
+      "@mysten/sui/*": ["../node_modules/@mysten/sui/dist/esm/*"]
+    }
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]

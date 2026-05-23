@@ -1,39 +1,35 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useWallet } from '../hooks/useWallet';
 import { conversationToMarkdown, downloadMarkdown, generateFilename } from '../utils/export';
-import { createWitness } from '../lib/witness';
+import { prepareWitness } from '../lib/witness';
 import type { Conversation } from '../adapters/interface';
+
+const SIGNER_URL = import.meta.env.VITE_SIGNER_URL || 'http://localhost:5173/signer.html';
 
 function App() {
   const { user, loading, signInWithGoogle, signOut } = useAuth();
-  const { connected, address, detectWallets, connect, disconnect, signAndExecuteTransaction } = useWallet();
   const [currentPlatform, setCurrentPlatform] = useState<string | null>(null);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isWitnessing, setIsWitnessing] = useState(false);
   const [witnessResult, setWitnessResult] = useState<any>(null);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-  const [wallets, setWallets] = useState<any[]>([]);
-  const [showWallets, setShowWallets] = useState(false);
 
   useEffect(() => {
     detectCurrentPlatform();
-    const availableWallets = detectWallets();
-    setWallets(availableWallets);
-  }, [detectWallets]);
+  }, []);
 
   async function detectCurrentPlatform() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return;
-
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'detectPlatform' });
       if (response?.success) {
         setCurrentPlatform(response.platform);
+        console.log('[Popup] Detected platform:', response.platform);
       }
-    } catch (e) {
-      console.log('Could not detect platform:', e);
+    } catch {
+      // Content script may not be available on non-chat pages.
     }
   }
 
@@ -52,13 +48,13 @@ function App() {
       console.log('[Popup] Received response:', response);
       if (response?.success && response.conversation) {
         setConversation(response.conversation);
-        showStatus('Conversation extracted successfully!', 'success');
+        showStatus('对话已提取！', 'success');
       } else {
-        showStatus(response?.error || 'Could not extract conversation', 'error');
+        showStatus(response?.error || '无法提取对话', 'error');
       }
     } catch (e) {
       console.log('[Popup] Error:', e);
-      showStatus('Could not connect to page. Please refresh the page and try again.', 'error');
+      showStatus('无法连接到页面，请刷新后重试', 'error');
     } finally {
       setIsExtracting(false);
     }
@@ -66,7 +62,7 @@ function App() {
 
   async function exportToMarkdown() {
     if (!conversation) {
-      showStatus('No conversation to export', 'error');
+      showStatus('没有可导出的对话', 'error');
       return;
     }
 
@@ -75,18 +71,12 @@ function App() {
     console.log('[Popup] Generated markdown:', markdown);
     const filename = generateFilename(conversation);
     downloadMarkdown(markdown, filename);
-    showStatus('Conversation exported successfully!', 'success');
+    showStatus('对话已导出！', 'success');
   }
 
   async function witnessToChain() {
     if (!conversation) {
-      showStatus('No conversation to witness', 'error');
-      return;
-    }
-
-    if (!connected || !address) {
-      showStatus('Please connect a wallet first', 'error');
-      setShowWallets(true);
+      showStatus('没有可存证的对话', 'error');
       return;
     }
 
@@ -95,26 +85,50 @@ function App() {
     setStatusMessage(null);
 
     try {
-      showStatus('Creating witness... This may take a few seconds.', 'success');
+      showStatus('正在准备存证...', 'success');
 
-      const result = await createWitness(
+      const prepared = await prepareWitness(
         conversation.messages,
         conversation.platform,
-        { address, signAndExecuteTransaction },
         conversation.title,
-        conversation.url
+        conversation.url,
       );
 
-      setWitnessResult(result);
-
-      if (result.success) {
-        showStatus('Witness created successfully!', 'success');
-      } else {
-        showStatus(result.error || 'Failed to create witness', 'error');
+      if (!prepared.success || !prepared.witnessRecordId || !prepared.walrusBlobId || !prepared.conversationHash) {
+        setWitnessResult(prepared);
+        showStatus(prepared.error || '存证准备失败', 'error');
+        return;
       }
+
+      const payload = {
+        extensionId: chrome.runtime.id,
+        requestId: crypto.randomUUID?.() ?? Date.now().toString(),
+        witnessRecordId: prepared.witnessRecordId,
+        conversationHash: prepared.conversationHash,
+        walrusBlobId: prepared.walrusBlobId,
+        platform: conversation.platform,
+        conversationTitle: conversation.title,
+        conversationUrl: conversation.url,
+        messageCount: conversation.messages.length,
+      };
+
+      await chrome.tabs.create({
+        url: `${SIGNER_URL}#${encodeURIComponent(JSON.stringify(payload))}`,
+        active: true,
+      });
+
+      setWitnessResult({
+        success: true,
+        witnessRecordId: prepared.witnessRecordId,
+        walrusBlobId: prepared.walrusBlobId,
+        conversationHash: prepared.conversationHash,
+      });
+      showStatus('已打开钱包签名页面，请在新页面完成交易', 'success');
     } catch (error) {
       console.error('[Popup] Witness error:', error);
-      showStatus('Failed to create witness', 'error');
+      const message = error instanceof Error ? error.message : '存证失败';
+      setWitnessResult({ success: false, error: message });
+      showStatus(message, 'error');
     } finally {
       setIsWitnessing(false);
     }
@@ -122,7 +136,7 @@ function App() {
 
   function showStatus(text: string, type: 'success' | 'error' = 'success') {
     setStatusMessage({ text, type });
-    setTimeout(() => setStatusMessage(null), 3000);
+    setTimeout(() => setStatusMessage(null), 4000);
   }
 
   if (loading) {
@@ -207,14 +221,6 @@ function App() {
             ? `已检测到: ${currentPlatform}`
             : '请在 AI 对话页面使用此插件'}
         </div>
-        {connected && address && (
-          <div className="mt-2 pt-2 border-t border-blue-200">
-            <div className="text-xs text-blue-700 font-medium">已连接钱包:</div>
-            <div className="text-xs text-blue-600 font-mono mt-1 truncate" title={address}>
-              {address.substring(0, 10)}...{address.substring(address.length - 8)}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="space-y-3">
@@ -253,60 +259,20 @@ function App() {
           钱包操作
         </div>
 
-        {!connected ? (
-          <>
-            <button
-              onClick={() => setShowWallets(!showWallets)}
-              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <span>🔗</span>
-              连接钱包
-            </button>
-
-            {showWallets && wallets.length > 0 && (
-              <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-2">
-                <div className="text-xs font-medium text-gray-500">选择钱包:</div>
-                {wallets.map((wallet, index) => (
-                  <button
-                    key={index}
-                    onClick={async () => {
-                      await connect(wallet);
-                      setShowWallets(false);
-                    }}
-                    className="w-full py-2 px-3 text-left text-sm text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                  >
-                    {wallet.name}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {showWallets && wallets.length === 0 && (
-              <div className="bg-gray-100 rounded-lg p-3 text-xs text-gray-600">
-                未检测到钱包，请安装 Sui Wallet、Slush 或其他 Sui 钱包插件
-              </div>
-            )}
-          </>
-        ) : (
-          <button
-            onClick={disconnect}
-            className="w-full py-2.5 px-4 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <span>✕</span>
-            断开钱包
-          </button>
-        )}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+          钱包连接将在普通 HTTP 签名页中完成，以便 Sui Wallet / Slush 能正常注入。
+        </div>
 
         <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
           区块链存证
         </div>
         <button
           onClick={witnessToChain}
-          disabled={!conversation || !connected || isWitnessing}
+          disabled={!conversation || isWitnessing}
           className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
         >
           <span>{isWitnessing ? '⏳' : '🔐'}</span>
-          {isWitnessing ? '存证中...' : '存证到 Sui 链'}
+          {isWitnessing ? '存证准备中...' : '打开钱包签名页'}
         </button>
 
         {witnessResult && (
@@ -318,7 +284,7 @@ function App() {
             <div className={`text-sm font-medium mb-2 ${
               witnessResult.success ? 'text-green-800' : 'text-red-800'
             }`}>
-              {witnessResult.success ? '存证成功!' : '存证失败'}
+              {witnessResult.success ? '存证成功！' : '存证失败'}
             </div>
             {witnessResult.success && witnessResult.suiTransactionDigest && (
               <div className="space-y-1">

@@ -1,37 +1,26 @@
 import { supabase } from './supabase';
 import { hashConversation, hashToHex } from './crypto';
 import { uploadToWalrus } from './walrus';
-import { createWitnessRecord, trackActivity } from '../db';
+import { createWitnessRecord, trackActivity, updateWitnessTransactionDigest } from '../db';
 import type { Message } from '../adapters/interface';
 
 const CLIENT_VERSION = '0.1.0';
 
 export interface WitnessResult {
   success: boolean;
+  witnessRecordId?: string;
   suiTransactionDigest?: string;
   walrusBlobId?: string;
   conversationHash?: string;
   error?: string;
 }
 
-interface WalletSigner {
-  address: string;
-  signAndExecuteTransaction?: (transaction: any) => Promise<{ digest: string }>;
-}
-
-/**
- * 完整的存证流程：
- * 1. 计算对话哈希
- * 2. 上传对话数据到 Walrus
- * 3. 发送交易到 Sui 链
- * 4. 保存记录到 Supabase
- */
-export async function createWitness(
+// 这个函数准备存证数据，交易签名由 popup 中的 dapp-kit 完成
+export async function prepareWitness(
   messages: Message[],
   platform: string,
-  wallet: WalletSigner,
   conversationTitle?: string,
-  conversationUrl?: string
+  conversationUrl?: string,
 ): Promise<WitnessResult> {
   try {
     // 1. 获取当前用户
@@ -60,27 +49,11 @@ export async function createWitness(
     const walrusBlobId = await uploadToWalrus(walrusData);
     console.log('Walrus blob ID:', walrusBlobId);
 
-    // 5. 构建并发送 Sui 交易 (暂时使用 mock)
-    // 真实的合约调用需要根据实际合约调整
-    console.log('Preparing Sui transaction...');
-    console.log('Wallet address:', wallet.address);
-    let suiTransactionDigest: string;
-
-    try {
-      // 这里暂时只生成一个 mock 交易 ID
-      // 真实实现需要根据部署的合约调整
-      suiTransactionDigest = 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
-      console.log('Generated transaction ID:', suiTransactionDigest);
-    } catch (txError) {
-      console.warn('Failed to prepare transaction:', txError);
-      suiTransactionDigest = 'mock_' + Date.now() + '_' + Math.random().toString(36).substring(2, 10);
-    }
-
-    // 6. 保存记录到 Supabase
-    console.log('Saving to Supabase...');
+    // 5. 保存一条预处理记录到 Supabase
+    console.log('Saving witness record...');
     const witnessRecord = await createWitnessRecord({
       user_id: user.id,
-      sui_transaction_digest: suiTransactionDigest,
+      sui_transaction_digest: 'pending_' + Date.now(),
       walrus_blob_id: walrusBlobId,
       platform,
       conversation_title: conversationTitle,
@@ -92,24 +65,69 @@ export async function createWitness(
     });
 
     if (!witnessRecord) {
-      console.warn('Failed to save witness record to Supabase');
+      return { success: false, error: 'Failed to save witness record' };
     }
 
-    // 7. 跟踪用户活动 (不阻塞主流程)
+    // 7. 跟踪用户活动
     trackActivity('witness', platform, {
-      transactionDigest: suiTransactionDigest,
       walrusBlobId,
       messageCount: messages.length,
+      pending: true,
     }).catch(e => console.warn('Activity tracking failed:', e));
 
     return {
       success: true,
-      suiTransactionDigest,
+      witnessRecordId: witnessRecord.id,
       walrusBlobId,
       conversationHash: conversationHashHex,
     };
   } catch (error) {
-    console.error('Witness creation failed:', error);
+    console.error('Witness preparation failed:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+// 这个函数用于完成存证（钱包页面调用后更新记录）
+export async function finalizeWitness(
+  witnessRecordId: string,
+  transactionDigest: string,
+  walrusBlobId: string,
+  conversationHash: string,
+  platform: string,
+): Promise<WitnessResult> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: 'User not logged in' };
+    }
+
+    const witnessRecord = await updateWitnessTransactionDigest(
+      witnessRecordId,
+      user.id,
+      transactionDigest,
+    );
+
+    if (!witnessRecord) {
+      return { success: false, error: 'Failed to update witness record' };
+    }
+
+    trackActivity('witness', platform, {
+      transactionDigest,
+      walrusBlobId,
+    }).catch(e => console.warn('Activity tracking failed:', e));
+
+    return {
+      success: true,
+      witnessRecordId,
+      suiTransactionDigest: transactionDigest,
+      walrusBlobId,
+      conversationHash,
+    };
+  } catch (error) {
+    console.error('Finalize witness failed:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

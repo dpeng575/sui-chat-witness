@@ -3,8 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SuiClientProvider, WalletProvider, createNetworkConfig } from '@mysten/dapp-kit';
 import { getFullnodeUrl } from '@mysten/sui/client';
 import '@mysten/dapp-kit/dist/index.css';
-import App from './App';
-import './index.css';
+import '../popup/index.css';
+import SignerApp from './SignerApp';
 
 const queryClient = new QueryClient();
 
@@ -16,7 +16,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={queryClient}>
     <SuiClientProvider networks={networkConfig} defaultNetwork="testnet">
       <WalletProvider autoConnect>
-        <App />
+        <SignerApp />
       </WalletProvider>
     </SuiClientProvider>
   </QueryClientProvider>,

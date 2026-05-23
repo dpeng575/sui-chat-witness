@@ -48,6 +48,27 @@ export async function createWitnessRecord(record: Omit<WitnessRecord, 'id' | 'cr
   return data;
 }
 
+export async function updateWitnessTransactionDigest(
+  id: string,
+  userId: string,
+  transactionDigest: string,
+): Promise<WitnessRecord | null> {
+  const { data, error } = await supabase
+    .from('witness_records')
+    .update({ sui_transaction_digest: transactionDigest })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .like('sui_transaction_digest', 'pending_%')
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating witness record:', error);
+    return null;
+  }
+  return data;
+}
+
 export async function getWitnessRecords(limit = 10): Promise<WitnessRecord[]> {
   const { data, error } = await supabase
     .from('witness_records')

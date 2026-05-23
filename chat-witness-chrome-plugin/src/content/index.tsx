@@ -1,9 +1,7 @@
-
 import { getCurrentAdapter, detectPlatform } from '../adapters';
 
 console.log('Sui-Seal content script loaded on:', window.location.href);
 
-// Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   switch (request.action) {
     case 'extractConversation': {
@@ -27,10 +25,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   return true;
 });
 
-// Initialize on page load
 const platform = detectPlatform();
 if (platform) {
   console.log(`Detected platform: ${platform}`);
-  // TODO: Inject UI button into page in future
 }
-
