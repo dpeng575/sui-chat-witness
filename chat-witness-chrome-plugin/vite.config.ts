@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { crx } from '@crxjs/vite-plugin';
@@ -16,11 +15,6 @@ export default defineConfig({
     },
   },
   plugins: [react(), crx({ manifest })],
-  resolve: {
-    alias: {
-      '@mysten/sui': resolve(__dirname, '../node_modules/@mysten/sui'),
-    },
-  },
   build: {
     rollupOptions: {
       input: {

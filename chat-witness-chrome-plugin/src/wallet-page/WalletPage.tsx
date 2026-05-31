@@ -16,7 +16,7 @@ interface Wallet {
   signAndExecuteTransactionBlock: (input: unknown) => Promise<{ digest: string }>;
 }
 
-const PACKAGE_ID = '0x850accfb3a6c30cc9f4aab8b3fa32e95c588a79e52362f63d81abc46aae6a949';
+const PACKAGE_ID = import.meta.env.VITE_SEAL_PACKAGE_ID;
 const CLIENT_VERSION = '0.1.0';
 
 // Helper to convert hex string to Uint8Array without Buffer

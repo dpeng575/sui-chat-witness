@@ -52,10 +52,16 @@ export async function updateWitnessTransactionDigest(
   id: string,
   userId: string,
   transactionDigest: string,
+  walrusBlobId: string,
+  metadata?: Pick<WitnessRecord, 'sui_object_id' | 'conversation_hash' | 'walrus_storage_start_at' | 'walrus_storage_epochs' | 'seal_encrypted'>,
 ): Promise<WitnessRecord | null> {
   const { data, error } = await supabase
     .from('witness_records')
-    .update({ sui_transaction_digest: transactionDigest })
+    .update({
+      sui_transaction_digest: transactionDigest,
+      walrus_blob_id: walrusBlobId,
+      ...metadata,
+    })
     .eq('id', id)
     .eq('user_id', userId)
     .like('sui_transaction_digest', 'pending_%')
@@ -69,18 +75,26 @@ export async function updateWitnessTransactionDigest(
   return data;
 }
 
-export async function getWitnessRecords(limit = 10): Promise<WitnessRecord[]> {
-  const { data, error } = await supabase
+export type WitnessRecordsPage = {
+  records: WitnessRecord[];
+  total: number;
+};
+
+export async function getWitnessRecords(page = 0, pageSize = 5): Promise<WitnessRecordsPage> {
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
+  const { data, error, count } = await supabase
     .from('witness_records')
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(from, to);
 
   if (error) {
     console.error('Error fetching witness records:', error);
-    return [];
+    return { records: [], total: 0 };
   }
-  return data;
+  return { records: data || [], total: count || 0 };
 }
 
 // ============================================

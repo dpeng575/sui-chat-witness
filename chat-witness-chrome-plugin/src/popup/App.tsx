@@ -2,9 +2,13 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { conversationToMarkdown, downloadMarkdown, generateFilename } from '../utils/export';
 import { prepareWitness } from '../lib/witness';
+import { getWitnessRecords } from '../db';
+import type { WitnessRecord } from '../db/types';
+import { downloadFromWalrus, downloadWalrusBlob } from '../lib/walrus';
 import type { Conversation } from '../adapters/interface';
 
 const SIGNER_URL = import.meta.env.VITE_SIGNER_URL || 'http://localhost:5173/signer.html';
+const RECORDS_PAGE_SIZE = 5;
 
 function App() {
   const { user, loading, signInWithGoogle, signOut } = useAuth();
@@ -13,10 +17,19 @@ function App() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [isWitnessing, setIsWitnessing] = useState(false);
   const [witnessResult, setWitnessResult] = useState<any>(null);
+  const [records, setRecords] = useState<WitnessRecord[]>([]);
+  const [recordsPage, setRecordsPage] = useState(0);
+  const [recordsTotal, setRecordsTotal] = useState(0);
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+  const [downloadingBlobId, setDownloadingBlobId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {
     detectCurrentPlatform();
+  }, []);
+
+  useEffect(() => {
+    loadWitnessRecords(0);
   }, []);
 
   async function detectCurrentPlatform() {
@@ -109,6 +122,7 @@ function App() {
         platform: conversation.platform,
         conversationTitle: conversation.title,
         conversationUrl: conversation.url,
+        messages: conversation.messages,
         messageCount: conversation.messages.length,
       };
 
@@ -123,6 +137,7 @@ function App() {
         walrusBlobId: prepared.walrusBlobId,
         conversationHash: prepared.conversationHash,
       });
+      await loadWitnessRecords(0);
       showStatus('已打开钱包签名页面，请在新页面完成交易', 'success');
     } catch (error) {
       console.error('[Popup] Witness error:', error);
@@ -131,6 +146,58 @@ function App() {
       showStatus(message, 'error');
     } finally {
       setIsWitnessing(false);
+    }
+  }
+
+  async function loadWitnessRecords(page: number) {
+    setIsLoadingRecords(true);
+    try {
+      const result = await getWitnessRecords(page, RECORDS_PAGE_SIZE);
+      setRecords(result.records);
+      setRecordsTotal(result.total);
+      setRecordsPage(page);
+    } catch (error) {
+      console.error('[Popup] Load records error:', error);
+      showStatus('加载存证记录失败', 'error');
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  }
+
+  async function downloadRecordBlob(record: WitnessRecord) {
+    if (record.seal_encrypted) {
+      if (!record.sui_object_id || !record.conversation_hash) {
+        showStatus('这条记录缺少 Seal 解密所需的链上对象 ID 或对话哈希，请重新存证生成新记录。', 'error');
+        return;
+      }
+
+      const payload = {
+        mode: 'decrypt',
+        conversationHash: record.conversation_hash,
+        walrusBlobId: record.walrus_blob_id,
+        suiObjectId: record.sui_object_id,
+        conversationTitle: record.conversation_title,
+        platform: record.platform,
+      };
+
+      await chrome.tabs.create({
+        url: `${SIGNER_URL}#${encodeURIComponent(JSON.stringify(payload))}`,
+        active: true,
+      });
+      showStatus('已打开钱包解密页面，请连接拥有该记录的钱包', 'success');
+      return;
+    }
+
+    setDownloadingBlobId(record.walrus_blob_id);
+    try {
+      const bytes = await downloadFromWalrus(record.walrus_blob_id);
+      downloadWalrusBlob(record.walrus_blob_id, bytes);
+      showStatus('Walrus 原文件已开始下载', 'success');
+    } catch (error) {
+      console.error('[Popup] Download Walrus blob error:', error);
+      showStatus(error instanceof Error ? error.message : '下载 Walrus 文件失败', 'error');
+    } finally {
+      setDownloadingBlobId(null);
     }
   }
 
@@ -274,6 +341,96 @@ function App() {
           <span>{isWitnessing ? '⏳' : '🔐'}</span>
           {isWitnessing ? '存证准备中...' : '打开钱包签名页'}
         </button>
+
+        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
+          存证记录
+        </div>
+
+        <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-gray-800">最近记录</div>
+            <button
+              onClick={() => loadWitnessRecords(recordsPage)}
+              disabled={isLoadingRecords}
+              className="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+            >
+              {isLoadingRecords ? '加载中...' : '刷新'}
+            </button>
+          </div>
+
+          {records.length === 0 ? (
+            <div className="text-xs text-gray-500 py-2">
+              {isLoadingRecords ? '正在加载存证记录...' : '暂无存证记录'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {records.map((record) => (
+                <div key={record.id} className="bg-gray-50 border border-gray-100 rounded-lg p-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-gray-800 truncate">
+                        {record.conversation_title || record.platform}
+                      </div>
+                      <div className="text-[11px] text-gray-500">
+                        {new Date(record.created_at).toLocaleString()}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => downloadRecordBlob(record)}
+                      disabled={downloadingBlobId === record.walrus_blob_id}
+                      className="shrink-0 text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    >
+                      {downloadingBlobId === record.walrus_blob_id ? '下载中...' : record.seal_encrypted ? '解密 Markdown' : '下载原文件'}
+                    </button>
+                  </div>
+
+                  <div className="mt-2 space-y-1 text-[11px] text-gray-600">
+                    <div>
+                      <span className="font-medium">Walrus:</span>
+                      <span className="font-mono ml-1 break-all">{record.walrus_blob_id}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium">交易:</span>
+                      <span className="font-mono ml-1 break-all">{record.sui_transaction_digest}</span>
+                    </div>
+                    {record.sui_object_id && (
+                      <div>
+                        <span className="font-medium">对象:</span>
+                        <span className="font-mono ml-1 break-all">{record.sui_object_id}</span>
+                      </div>
+                    )}
+                    {record.walrus_storage_start_at && (
+                      <div>
+                        <span className="font-medium">存储开始:</span>
+                        <span className="ml-1">{new Date(record.walrus_storage_start_at).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1">
+            <button
+              onClick={() => loadWitnessRecords(recordsPage - 1)}
+              disabled={recordsPage === 0 || isLoadingRecords}
+              className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-40"
+            >
+              上一页
+            </button>
+            <div className="text-xs text-gray-500">
+              第 {recordsPage + 1} 页 / 共 {Math.max(1, Math.ceil(recordsTotal / RECORDS_PAGE_SIZE))} 页
+            </div>
+            <button
+              onClick={() => loadWitnessRecords(recordsPage + 1)}
+              disabled={(recordsPage + 1) * RECORDS_PAGE_SIZE >= recordsTotal || isLoadingRecords}
+              className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-40"
+            >
+              下一页
+            </button>
+          </div>
+        </div>
 
         {witnessResult && (
           <div className={`rounded-lg p-3 mt-3 ${

@@ -1,6 +1,8 @@
 module witness::witness {
     use std::string::{Self, String};
     use sui::event;
+
+    const ENoAccess: u64 = 0;
     use sui::object::{Self, UID, ID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
@@ -59,6 +61,14 @@ module witness::witness {
 
         // 转移给调用者
         transfer::transfer(record, tx_context::sender(ctx));
+    }
+
+    entry fun seal_approve(
+        id: vector<u8>,
+        record: &WitnessRecord,
+        _ctx: &TxContext
+    ) {
+        assert!(id == record.conversation_hash, ENoAccess);
     }
 
     /// 获取存证记录的信息（用于验证）

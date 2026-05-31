@@ -11,6 +11,10 @@ type ExternalWitnessMessage = {
   walrusBlobId?: string;
   conversationHash?: string;
   platform?: string;
+  suiObjectId?: string;
+  walrusStorageStartAt?: string;
+  walrusStorageEpochs?: number;
+  sealEncrypted?: boolean;
   error?: string;
 };
 
@@ -41,6 +45,10 @@ chrome.runtime.onMessageExternal.addListener((message: ExternalWitnessMessage, s
       message.walrusBlobId,
       message.conversationHash,
       message.platform,
+      message.suiObjectId,
+      message.walrusStorageStartAt,
+      message.walrusStorageEpochs,
+      message.sealEncrypted,
     ).then((result) => {
       sendResponse(result);
     }).catch((error) => {

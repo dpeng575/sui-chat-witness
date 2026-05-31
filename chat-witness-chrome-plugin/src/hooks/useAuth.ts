@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, getCurrentUser, signOut, User } from '../lib/supabase';
-import { prepareZkLogin, finalizeZkLogin, logoutZkLogin } from '../lib/zklogin';
 
 // const DEV_MODE = import.meta.env.DEV;
 const DEV_MODE = false;
@@ -18,7 +17,6 @@ const MOCK_USER: User = {
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [zkLoginAddress, setZkLoginAddress] = useState<string | null>(null);
 
   // 初始化时检查登录状态
   useEffect(() => {
@@ -39,16 +37,6 @@ export function useAuth() {
 
       const currentUser = await getCurrentUser();
       setUser(currentUser);
-
-      // 检查是否有 zkLogin 地址
-      if (currentUser) {
-        try {
-          const zkAddr = await import('../lib/zklogin').then(m => m.getZkLoginAddress());
-          setZkLoginAddress(zkAddr);
-        } catch (e) {
-          console.log('No zkLogin session found');
-        }
-      }
     } catch (error) {
       console.error('Auth check failed:', error);
     } finally {
@@ -66,10 +54,7 @@ export function useAuth() {
     }
 
     try {
-      // 步骤 1：准备 zkLogin，获取 nonce
-      const zkNonce = prepareZkLogin();
-
-      // 步骤 2：使用 Chrome Identity API 发起 OAuth，使用 zkLogin 的 nonce
+      const nonce = crypto.randomUUID();
       const redirectURL = chrome.identity.getRedirectURL();
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -78,7 +63,7 @@ export function useAuth() {
       authURL.searchParams.set('response_type', 'id_token');
       authURL.searchParams.set('redirect_uri', redirectURL);
       authURL.searchParams.set('scope', 'openid email profile');
-      authURL.searchParams.set('nonce', zkNonce); // 使用 zkLogin 的 nonce！
+      authURL.searchParams.set('nonce', nonce);
 
       const responseURL = await chrome.identity.launchWebAuthFlow({
         url: authURL.toString(),
@@ -101,20 +86,10 @@ export function useAuth() {
       const { data: supabaseData, error: supabaseError } = await supabase.auth.signInWithIdToken({
         provider: 'google',
         token: idToken,
-        nonce: zkNonce,
+        nonce: nonce,
       });
 
       if (supabaseError) throw supabaseError;
-
-      // 步骤 4：完成 zkLogin（获取证明等）
-      try {
-        const zkAddr = await finalizeZkLogin(idToken);
-        setZkLoginAddress(zkAddr);
-        console.log('zkLogin success:', zkAddr);
-      } catch (zkErr) {
-        console.error('zkLogin failed (but Supabase logged in):', zkErr);
-        // 即使 zkLogin 失败，Supabase 还是能正常用的
-      }
 
       await checkAuth();
       return supabaseData;
@@ -130,14 +105,11 @@ export function useAuth() {
       if (DEV_MODE) {
         await chrome.storage.local.remove('devLoggedIn');
         setUser(null);
-        setZkLoginAddress(null);
         return;
       }
 
       await signOut();
-      await logoutZkLogin();
       setUser(null);
-      setZkLoginAddress(null);
     } catch (error) {
       console.error('Sign out failed:', error);
     }
@@ -145,7 +117,6 @@ export function useAuth() {
 
   return {
     user,
-    zkLoginAddress,
     loading,
     signInWithGoogle,
     signOut: handleSignOut,

@@ -19,7 +19,12 @@ export interface WitnessRecord {
   id: string;
   user_id: string;
   sui_transaction_digest: string;
+  sui_object_id?: string;
+  conversation_hash?: string;
   walrus_blob_id: string;
+  walrus_storage_start_at?: string;
+  walrus_storage_epochs?: number;
+  seal_encrypted?: boolean;
   platform: string;
   conversation_title?: string;
   conversation_url?: string;

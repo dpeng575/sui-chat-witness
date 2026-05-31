@@ -10,8 +10,12 @@ export interface WitnessResult {
   success: boolean;
   witnessRecordId?: string;
   suiTransactionDigest?: string;
+  suiObjectId?: string;
   walrusBlobId?: string;
   conversationHash?: string;
+  walrusStorageStartAt?: string;
+  walrusStorageEpochs?: number;
+  sealEncrypted?: boolean;
   error?: string;
 }
 
@@ -97,6 +101,10 @@ export async function finalizeWitness(
   walrusBlobId: string,
   conversationHash: string,
   platform: string,
+  suiObjectId?: string,
+  walrusStorageStartAt?: string,
+  walrusStorageEpochs?: number,
+  sealEncrypted?: boolean,
 ): Promise<WitnessResult> {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -108,6 +116,14 @@ export async function finalizeWitness(
       witnessRecordId,
       user.id,
       transactionDigest,
+      walrusBlobId,
+      {
+        sui_object_id: suiObjectId,
+        conversation_hash: conversationHash,
+        walrus_storage_start_at: walrusStorageStartAt,
+        walrus_storage_epochs: walrusStorageEpochs,
+        seal_encrypted: sealEncrypted,
+      },
     );
 
     if (!witnessRecord) {
@@ -123,8 +139,12 @@ export async function finalizeWitness(
       success: true,
       witnessRecordId,
       suiTransactionDigest: transactionDigest,
+      suiObjectId,
       walrusBlobId,
       conversationHash,
+      walrusStorageStartAt,
+      walrusStorageEpochs,
+      sealEncrypted,
     };
   } catch (error) {
     console.error('Finalize witness failed:', error);
