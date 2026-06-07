@@ -193,16 +193,38 @@ export async function decryptMarkdown({
     throw new Error('Walrus 文件中的 Seal 加密 ID 与当前存证 Hash 不一致。请确认记录使用的是 Walrus File ID，并用当前版本重新存证后再解密。');
   }
 
+  console.info('Seal decrypt diagnostics', {
+    encryptedPackageId: encryptedObject.packageId,
+    configuredSealPackageId: getSealPackageId(),
+    configuredNamespacePackageId: getSealNamespacePackageId(),
+    encryptedId: encryptedObject.id,
+    conversationHash,
+    threshold: encryptedObject.threshold,
+    configuredThreshold: getSealThreshold(),
+    keyServerObjectIds: SEAL_KEY_SERVERS.map((server) => server.objectId),
+    witnessObjectId,
+    sender,
+    encryptedBytesLength: encryptedBytes.length,
+  });
+
   const txBytes = await tx.build({ client: createStorageClient(), onlyTransactionKind: true });
   try {
     const decrypted = await createSealClient().decrypt({
       data: encryptedBytes,
       sessionKey,
       txBytes,
+      checkShareConsistency: true,
     });
 
     return new TextDecoder().decode(decrypted);
   } catch (error) {
+    console.error('Seal decrypt raw error', {
+      name: error instanceof Error ? error.constructor.name : typeof error,
+      message: error instanceof Error ? error.message : String(error),
+      encryptedObjectKeys: Object.keys(encryptedObject),
+      encryptedObject,
+    });
+
     if (isSealDecryptionError(error)) {
       throw new Error('Seal 解密校验失败。通常是这条记录在旧 package/旧 Walrus Blob ID/旧加密参数下生成，请用当前配置重新存证后再解密。');
     }

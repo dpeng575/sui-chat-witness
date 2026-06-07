@@ -8,5 +8,9 @@
   "scripts": {
     "dev:chrome": "cd chat-witness-chrome-plugin && npm run dev",
     "build:chrome": "cd chat-witness-chrome-plugin && npm run build"
+  },
+  "dependencies": {
+    "base32.js": "^0.1.0",
+    "bs58": "^6.0.0"
   }
 }
