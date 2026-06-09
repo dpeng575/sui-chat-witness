@@ -3,3 +3,5 @@ node_modules
 .env.test
 .env.production
 dist
+.next
+next-env.d.ts
