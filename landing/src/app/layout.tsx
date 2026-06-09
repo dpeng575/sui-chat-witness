@@ -1,0 +1,15 @@
+import type { Metadata } from 'next';
+import './globals.css';
+
+export const metadata: Metadata = {
+  title: 'Sui-Seal',
+  description: 'Permanent AI conversation witness storage on Sui and Walrus.',
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="zh-CN">
+      <body>{children}</body>
+    </html>
+  );
+}
