@@ -1,14 +1,14 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { publicConfig } from './config';
 
-export interface AppUser {
+export type AppUser = {
   id: string;
-  email: string | undefined;
-  name: string | undefined;
-  avatarUrl: string | undefined;
-}
+  email: string;
+  name?: string;
+  avatarUrl?: string;
+};
 
-let supabaseBrowserClient: SupabaseClient | null = null;
+let browserClient: ReturnType<typeof createClient> | null = null;
 
 export function getSupabaseBrowserClient(): SupabaseClient {
   if (!publicConfig.supabaseUrl) {
@@ -18,59 +18,49 @@ export function getSupabaseBrowserClient(): SupabaseClient {
     throw new Error('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY is not configured');
   }
 
-  if (!supabaseBrowserClient) {
-    supabaseBrowserClient = createClient(
+  if (!browserClient) {
+    browserClient = createClient(
       publicConfig.supabaseUrl,
-      publicConfig.supabasePublishableKey
+      publicConfig.supabasePublishableKey,
+      {
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true,
+        },
+      }
     );
   }
 
-  return supabaseBrowserClient;
+  return browserClient;
 }
 
-export function getCurrentUser(supabase: SupabaseClient): AppUser | null {
-  const user = supabase.auth.getUser();
-  if (!user) {
-    return null;
-  }
-
-  // In a real implementation, you'd await the promise
-  // This is a simplified version that works with the type
-  return {
-    id: '',
-    email: undefined,
-    name: undefined,
-    avatarUrl: undefined,
-  };
-}
-
-// Actual async implementation for use in components
-export async function getCurrentUserAsync(
-  supabase: SupabaseClient
-): Promise<AppUser | null> {
-  const { data: { user } } = await supabase.auth.getUser();
+export async function getCurrentUser(): Promise<AppUser | null> {
+  const { data: { user } } = await getSupabaseBrowserClient().auth.getUser();
   if (!user) {
     return null;
   }
 
   return {
     id: user.id,
-    email: user.email,
+    email: user.email!,
     name: user.user_metadata?.full_name || user.user_metadata?.name,
     avatarUrl: user.user_metadata?.avatar_url,
   };
 }
 
-export async function signInWithGoogle(supabase: SupabaseClient, locale: string) {
+export async function signInWithGoogle(locale: string) {
   const redirectTo = `${window.location.origin}/${locale}/dashboard`;
-  await supabase.auth.signInWithOAuth({
+  const { error } = await getSupabaseBrowserClient().auth.signInWithOAuth({
     provider: 'google',
     options: {
       redirectTo,
     },
   });
+  if (error) throw error;
 }
 
-export async function signOut(supabase: SupabaseClient) {
-  await supabase.auth.signOut();
+export async function signOut() {
+  const { error } = await getSupabaseBrowserClient().auth.signOut();
+  if (error) throw error;
 }

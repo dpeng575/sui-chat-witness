@@ -1,31 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Dictionary, Locale } from '../lib/i18n';
+import type { Dictionary, Locale } from '@/lib/i18n';
 import {
-  getSupabaseBrowserClient,
-  getCurrentUserAsync,
+  getCurrentUser,
   signInWithGoogle,
   signOut,
+  getSupabaseBrowserClient,
   type AppUser,
-} from '../lib/supabase';
+} from '@/lib/supabase';
 
-interface AuthButtonProps {
-  dict: Dictionary;
-  locale: Locale;
-}
-
-export function AuthButton({ dict, locale }: AuthButtonProps) {
+export function AuthButton({ locale, dictionary }: { locale: Locale; dictionary: Dictionary }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const supabase = getSupabaseBrowserClient();
     let mounted = true;
 
     async function loadUser() {
       try {
-        const currentUser = await getCurrentUserAsync(supabase);
+        const currentUser = await getCurrentUser();
         if (mounted) {
           setUser(currentUser);
         }
@@ -42,10 +36,10 @@ export function AuthButton({ dict, locale }: AuthButtonProps) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = getSupabaseBrowserClient().auth.onAuthStateChange(async (event, session) => {
       if (mounted) {
         if (session?.user) {
-          const currentUser = await getCurrentUserAsync(supabase);
+          const currentUser = await getCurrentUser();
           setUser(currentUser);
         } else {
           setUser(null);
@@ -60,27 +54,25 @@ export function AuthButton({ dict, locale }: AuthButtonProps) {
     };
   }, []);
 
-  const handleSignIn = async () => {
-    const supabase = getSupabaseBrowserClient();
-    await signInWithGoogle(supabase, locale);
-  };
-
-  const handleSignOut = async () => {
-    const supabase = getSupabaseBrowserClient();
-    await signOut(supabase);
-  };
-
   if (loading) {
-    return <span>...</span>;
+    return (
+      <span
+        role="status"
+        aria-label="Loading authentication state"
+        className="text-sm text-slate-500"
+      >
+        ...
+      </span>
+    );
   }
 
   if (!user) {
     return (
       <button
-        onClick={handleSignIn}
-        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+        onClick={() => signInWithGoogle(locale)}
+        className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white"
       >
-        {dict.nav.signIn}
+        {dictionary.nav.signIn}
       </button>
     );
   }
@@ -94,12 +86,16 @@ export function AuthButton({ dict, locale }: AuthButtonProps) {
           className="w-8 h-8 rounded-full"
         />
       )}
-      {user.email && <span className="text-sm text-gray-700">{user.email}</span>}
+      {user.email && (
+        <span className="text-sm text-slate-700" aria-label={user.email}>
+          {user.email}
+        </span>
+      )}
       <button
-        onClick={handleSignOut}
-        className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+        onClick={() => signOut()}
+        className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
       >
-        {dict.nav.signOut}
+        {dictionary.nav.signOut}
       </button>
     </div>
   );
