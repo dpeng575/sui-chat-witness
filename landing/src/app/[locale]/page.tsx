@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation';
 
+import { LandingPage } from '@/components/landing-page';
 import { getDictionary, isLocale } from '@/lib/i18n';
 
-export default async function LocalePage({
+export default async function LocaleHomePage({
   params,
 }: {
   params: Promise<{ locale: string }>;
@@ -13,12 +14,5 @@ export default async function LocalePage({
     notFound();
   }
 
-  const dictionary = getDictionary(locale);
-
-  return (
-    <main>
-      <h1>{dictionary.landing.heroTitle}</h1>
-      <p>{dictionary.landing.heroSubtitle}</p>
-    </main>
-  );
+  return <LandingPage locale={locale} dictionary={getDictionary(locale)} />;
 }
