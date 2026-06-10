@@ -1,0 +1,302 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { ConnectButton } from '@mysten/dapp-kit';
+
+import type { Dictionary, Locale } from '@/lib/i18n';
+import {
+  getCurrentUser,
+  getSupabaseBrowserClient,
+  signInWithGoogle,
+  signOut,
+  type AppUser,
+} from '@/lib/supabase';
+import {
+  getRecordsSummary,
+  getWitnessRecords,
+  type WitnessRecord,
+} from '@/lib/witness-records';
+import { publicConfig } from '@/lib/config';
+
+const PAGE_SIZE = 10;
+
+function RecordCard({ record, dictionary }: { record: WitnessRecord; dictionary: Dictionary }) {
+  const title = record.conversation_title || 'Untitled conversation';
+  const txUrl = `${publicConfig.suiExplorerBaseUrl}/tx/${record.sui_transaction_digest}`;
+
+  return (
+    <article className="rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(74,32,66,0.08)]">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h3 className="truncate text-lg font-black leading-7 text-[#231824]">{title}</h3>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-[#5f4659]">
+            <span className="rounded-full bg-[#fff7fb] px-3 py-1">{record.platform}</span>
+            {record.message_count != null && (
+              <span className="rounded-full bg-[#fff7fb] px-3 py-1">
+                {record.message_count} messages
+              </span>
+            )}
+            <span className="rounded-full bg-[#fff7fb] px-3 py-1">
+              {new Date(record.created_at).toLocaleDateString()}
+            </span>
+          </div>
+        </div>
+        <a
+          href={txUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 rounded-full bg-brand/10 px-4 py-2 text-xs font-black text-brand transition hover:bg-brand/20"
+        >
+          {dictionary.dashboard.openTx}
+        </a>
+      </div>
+
+      <div className="mt-4 space-y-2 text-xs font-mono text-[#5f4659]">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-[#4c3447]">Walrus:</span>
+          <span className="truncate">{record.walrus_blob_id}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-[#4c3447]">Digest:</span>
+          <span className="truncate">{record.sui_transaction_digest}</span>
+        </div>
+        {record.sui_object_id && (
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-[#4c3447]">Object:</span>
+            <span className="truncate">{record.sui_object_id}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 flex gap-3">
+        <button
+          data-record-download
+          disabled
+          className="rounded-full bg-[#17111a] px-5 py-2.5 text-sm font-black text-white opacity-50"
+        >
+          {dictionary.dashboard.downloadMarkdown}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+export function DashboardClient({
+  locale,
+  dictionary,
+}: {
+  locale: Locale;
+  dictionary: Dictionary;
+}) {
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [records, setRecords] = useState<WitnessRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const summary = useMemo(() => getRecordsSummary(records), [records]);
+  const hasMore = records.length < total;
+
+  async function loadRecords(nextPage: number = 0) {
+    setStatus(null);
+    try {
+      const currentUser = await getCurrentUser();
+      if (!currentUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      setUser(currentUser);
+
+      const supabase = getSupabaseBrowserClient();
+      const result = await getWitnessRecords(supabase, nextPage, PAGE_SIZE);
+
+      if (nextPage === 0) {
+        setRecords(result.records);
+      } else {
+        setRecords((prev) => [...prev, ...result.records]);
+      }
+
+      setTotal(result.total);
+      setPage(nextPage);
+    } catch (error) {
+      console.error('Error loading records:', error);
+      setStatus('Failed to load records. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true;
+
+    loadRecords(0);
+
+    const {
+      data: { subscription },
+    } = getSupabaseBrowserClient().auth.onAuthStateChange(async (event, session) => {
+      if (mounted) {
+        if (session?.user) {
+          loadRecords(0);
+        } else {
+          setUser(null);
+          setRecords([]);
+          setTotal(0);
+        }
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[#fff7fb] text-[#17111a]">
+        <div className="mx-auto flex max-w-7xl items-center justify-center px-5 py-24">
+          <div className="text-lg font-bold text-[#5f4659]">Loading...</div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="min-h-screen bg-[#fff7fb] text-[#17111a]">
+        <div className="pointer-events-none fixed inset-0 -z-10">
+          <div className="absolute left-[-10rem] top-[-8rem] h-96 w-96 rounded-full bg-[#ff8fca]/30 blur-3xl" />
+        </div>
+
+        <header className="sticky top-0 z-20 border-b border-[#2a182f]/10 bg-[#fff7fb]/85 backdrop-blur-xl">
+          <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
+            <Link href={`/${locale}`} className="group flex items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#17111a] text-sm font-black tracking-tight text-white shadow-[0_12px_30px_rgba(23,17,26,0.18)] transition-transform group-hover:-rotate-6">
+                SS
+              </span>
+              <span>
+                <span className="block text-sm font-black uppercase tracking-[0.24em] text-[#17111a]">Sui-Seal</span>
+                <span className="block text-xs font-semibold text-[#7c556d]">Chat Witness</span>
+              </span>
+            </Link>
+          </nav>
+        </header>
+
+        <div className="mx-auto max-w-2xl px-5 py-24 text-center">
+          <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">{dictionary.dashboard.title}</h1>
+          <p className="mt-4 text-lg text-[#5f4659]">{dictionary.dashboard.loginRequired}</p>
+          <button
+            onClick={() => signInWithGoogle(locale)}
+            className="mt-8 inline-flex items-center justify-center rounded-full bg-brand px-7 py-4 text-base font-black text-white shadow-soft transition hover:-translate-y-1 hover:opacity-90"
+          >
+            {dictionary.nav.signIn}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#fff7fb] text-[#17111a]">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute left-[-10rem] top-[-8rem] h-96 w-96 rounded-full bg-[#ff8fca]/30 blur-3xl" />
+      </div>
+
+      <header className="sticky top-0 z-20 border-b border-[#2a182f]/10 bg-[#fff7fb]/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+          <Link href={`/${locale}`} className="group flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#17111a] text-sm font-black tracking-tight text-white shadow-[0_12px_30px_rgba(23,17,26,0.18)] transition-transform group-hover:-rotate-6">
+              SS
+            </span>
+            <span className="hidden sm:block">
+              <span className="block text-sm font-black uppercase tracking-[0.24em] text-[#17111a]">Sui-Seal</span>
+              <span className="block text-xs font-semibold text-[#7c556d]">Chat Witness</span>
+            </span>
+          </Link>
+
+          <div className="flex flex-1 items-center justify-end gap-3">
+            <ConnectButton connectText={dictionary.dashboard.connectWallet} />
+            <button
+              onClick={() => signOut()}
+              className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 transition-colors"
+            >
+              {dictionary.nav.signOut}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8">
+        <div>
+          <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">{dictionary.dashboard.title}</h1>
+          <p className="mt-4 text-lg text-[#5f4659]">{dictionary.dashboard.subtitle}</p>
+        </div>
+
+        {status && (
+          <div className="mt-6 rounded-[1.5rem] bg-red-50 p-4 text-sm font-bold text-red-700">{status}</div>
+        )}
+
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <div className="rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(74,32,66,0.08)]">
+            <p className="text-sm font-black uppercase tracking-[0.22em] text-brand">{dictionary.dashboard.totalRecords}</p>
+            <p className="mt-2 text-4xl font-black text-[#17111a]">{total}</p>
+          </div>
+          <div className="rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(74,32,66,0.08)]">
+            <p className="text-sm font-black uppercase tracking-[0.22em] text-brand">{dictionary.dashboard.latestWitness}</p>
+            <p className="mt-2 text-lg font-black text-[#17111a]">
+              {summary.latestCreatedAt ? new Date(summary.latestCreatedAt).toLocaleDateString() : '-'}
+            </p>
+          </div>
+          <div className="rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(74,32,66,0.08)]">
+            <p className="text-sm font-black uppercase tracking-[0.22em] text-brand">{dictionary.dashboard.platforms}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {Object.entries(summary.platformCounts).map(([platform, count]) => (
+                <span key={platform} className="rounded-full bg-[#fff7fb] px-3 py-1 text-sm font-bold text-[#4c3447]">
+                  {platform}: {count}
+                </span>
+              ))}
+              {Object.keys(summary.platformCounts).length === 0 && <span className="text-sm font-bold text-[#5f4659]">-</span>}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-10 flex items-center justify-between gap-4">
+          <h2 className="text-2xl font-black tracking-[-0.03em]">{dictionary.dashboard.records}</h2>
+          <button
+            onClick={() => loadRecords(0)}
+            className="rounded-full bg-white px-4 py-2 text-sm font-black text-[#17111a] shadow-[0_12px_30px_rgba(23,17,26,0.08)] ring-1 ring-[#2a182f]/10 transition hover:-translate-y-0.5"
+          >
+            {dictionary.dashboard.refresh}
+          </button>
+        </div>
+
+        {records.length === 0 ? (
+          <div className="mt-6 rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-12 text-center shadow-[0_18px_50px_rgba(74,32,66,0.08)]">
+            <p className="text-lg font-bold text-[#5f4659]">{dictionary.dashboard.empty}</p>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {records.map((record) => (
+              <RecordCard key={record.id} record={record} dictionary={dictionary} />
+            ))}
+          </div>
+        )}
+
+        {hasMore && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => loadRecords(page + 1)}
+              className="inline-flex items-center justify-center rounded-full bg-white px-7 py-4 text-base font-black text-[#17111a] shadow-[0_18px_44px_rgba(23,17,26,0.08)] transition hover:-translate-y-1"
+            >
+              {dictionary.dashboard.loadMore}
+            </button>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
