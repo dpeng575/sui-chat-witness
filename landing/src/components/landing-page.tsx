@@ -37,20 +37,20 @@ export function LandingPage({
           </Link>
 
           <div className="hidden items-center gap-8 text-sm font-bold text-[#5f4659] md:flex">
-            <a className="transition hover:text-[#ff4fa3]" href="#product">
+            <a className="transition hover:text-brand" href="#product">
               {dictionary.nav.product}
             </a>
-            <a className="transition hover:text-[#ff4fa3]" href="#install">
+            <a className="transition hover:text-brand" href="#install">
               {dictionary.nav.install}
             </a>
-            <a className="transition hover:text-[#ff4fa3]" href="#faq">
+            <a className="transition hover:text-brand" href="#faq">
               {dictionary.nav.faq}
             </a>
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
             <Link
-              className="rounded-full border border-[#2a182f]/15 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#4c3447] transition hover:border-[#ff4fa3]/50 hover:text-[#ff4fa3]"
+              className="rounded-full border border-[#2a182f]/15 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-[#4c3447] transition hover:border-brand/50 hover:text-brand"
               href={switchLocalePath(`/${locale}`, otherLocale)}
             >
               {otherLocale.toUpperCase()}
@@ -67,7 +67,7 @@ export function LandingPage({
 
       <section className="relative mx-auto grid max-w-7xl gap-12 px-5 py-16 sm:px-8 sm:py-24 lg:grid-cols-[1.02fr_0.98fr] lg:items-center lg:py-28">
         <div>
-          <p className="mb-6 inline-flex rounded-full border border-[#ff4fa3]/25 bg-white/75 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-[#d92d86] shadow-[0_12px_30px_rgba(255,79,163,0.08)]">
+          <p className="mb-6 inline-flex rounded-full border border-brand/25 bg-white/75 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-brand shadow-soft">
             {dictionary.landing.badge}
           </p>
           <h1 className="max-w-4xl text-5xl font-black leading-[0.92] tracking-[-0.06em] text-[#17111a] sm:text-7xl lg:text-8xl">
@@ -78,7 +78,7 @@ export function LandingPage({
           </p>
           <div className="mt-10 flex flex-col gap-4 sm:flex-row">
             <a
-              className="inline-flex items-center justify-center rounded-full bg-[#ff4fa3] px-7 py-4 text-base font-black text-white shadow-[0_24px_54px_rgba(255,79,163,0.35)] transition hover:-translate-y-1 hover:bg-[#ef2f8f]"
+              className="inline-flex items-center justify-center rounded-full bg-brand px-7 py-4 text-base font-black text-white shadow-soft transition hover:-translate-y-1 hover:opacity-90"
               href={publicConfig.extensionDownloadUrl}
             >
               {dictionary.landing.primaryCta}
@@ -94,7 +94,7 @@ export function LandingPage({
 
         <div className="relative mx-auto w-full max-w-xl lg:mr-0">
           <div className="absolute -left-8 top-10 h-28 w-28 rounded-[2rem] bg-[#f7c948] shadow-[0_24px_60px_rgba(247,201,72,0.28)]" />
-          <div className="absolute -right-6 bottom-12 h-32 w-32 rounded-full bg-[#ff4fa3]/25 blur-sm" />
+          <div className="absolute -right-6 bottom-12 h-32 w-32 rounded-full bg-brand/25 blur-sm" />
           <div className="relative rounded-[2.5rem] border border-[#2a182f]/10 bg-white/80 p-4 shadow-[0_34px_90px_rgba(74,32,66,0.18)] backdrop-blur-xl">
             <div className="rounded-[2rem] bg-[#17111a] p-5 text-white">
               <div className="mb-5 flex items-center justify-between">
@@ -111,7 +111,7 @@ export function LandingPage({
                   <p className="mt-2 text-sm leading-6 text-white/80">Preserve this answer as verifiable evidence.</p>
                 </div>
                 <div className="ml-8 rounded-3xl bg-[#fff7fb] p-4 text-[#17111a]">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-[#d92d86]">Sui-Seal</p>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-brand">Sui-Seal</p>
                   <p className="mt-2 text-sm leading-6 text-[#4c3447]">Encrypted archive created. Walrus blob pinned. Sui witness transaction signed.</p>
                 </div>
               </div>
@@ -128,7 +128,7 @@ export function LandingPage({
       <section id="product" className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-20">
         <div className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.22em] text-[#d92d86]">Product</p>
+            <p className="text-sm font-black uppercase tracking-[0.22em] text-brand">Product</p>
             <h2 className="mt-4 max-w-xl text-4xl font-black leading-tight tracking-[-0.04em] sm:text-5xl">
               {dictionary.landing.valueTitle}
             </h2>
@@ -158,7 +158,7 @@ export function LandingPage({
             <ol className="grid gap-4">
               {dictionary.landing.workflowItems.map((item, index) => (
                 <li key={item} className="flex gap-4 rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#ff4fa3] text-sm font-black text-white">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-sm font-black text-white">
                     {index + 1}
                   </span>
                   <p className="text-base font-bold leading-7 text-white/82">{item}</p>
@@ -179,7 +179,7 @@ export function LandingPage({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {platforms.map((platform) => (
             <article key={platform} className="group rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(74,32,66,0.08)] transition hover:-translate-y-1 hover:bg-white">
-              <div className="mb-12 h-16 rounded-[1.35rem] bg-gradient-to-br from-[#ff4fa3] via-[#ff8fca] to-[#f7c948] opacity-80 transition group-hover:opacity-100" />
+              <div className="mb-12 h-16 rounded-[1.35rem] bg-gradient-to-br from-brand via-[#ff8fca] to-[#f7c948] opacity-80 transition group-hover:opacity-100" />
               <h3 className="text-2xl font-black tracking-[-0.03em]">{platform}</h3>
             </article>
           ))}
@@ -189,7 +189,7 @@ export function LandingPage({
       <section id="install" className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-20">
         <div className="grid gap-8 rounded-[2.5rem] border border-[#2a182f]/10 bg-white/70 p-6 shadow-[0_26px_80px_rgba(74,32,66,0.1)] sm:p-10 lg:grid-cols-[0.75fr_1.25fr] lg:p-12">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.22em] text-[#d92d86]">Install</p>
+            <p className="text-sm font-black uppercase tracking-[0.22em] text-brand">Install</p>
             <h2 className="mt-4 text-4xl font-black leading-tight tracking-[-0.04em] sm:text-5xl">
               {dictionary.landing.installTitle}
             </h2>
@@ -197,7 +197,7 @@ export function LandingPage({
           <ol className="grid gap-4">
             {dictionary.landing.installSteps.map((step, index) => (
               <li key={step} className="flex items-center gap-4 rounded-[1.75rem] bg-[#fff7fb] p-5 ring-1 ring-[#2a182f]/8">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[#ff4fa3] text-base font-black text-white">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-brand text-base font-black text-white">
                   {index + 1}
                 </span>
                 <p className="text-lg font-black leading-7 text-[#231824]">{step}</p>
@@ -209,7 +209,7 @@ export function LandingPage({
 
       <section id="faq" className="mx-auto max-w-5xl px-5 py-12 sm:px-8 sm:py-20">
         <div className="text-center">
-          <p className="text-sm font-black uppercase tracking-[0.22em] text-[#d92d86]">FAQ</p>
+          <p className="text-sm font-black uppercase tracking-[0.22em] text-brand">FAQ</p>
           <h2 className="mt-4 text-4xl font-black leading-tight tracking-[-0.04em] sm:text-5xl">
             {dictionary.landing.faqTitle}
           </h2>
@@ -220,7 +220,7 @@ export function LandingPage({
               <summary className="cursor-pointer list-none text-lg font-black leading-7 text-[#231824] marker:hidden">
                 <span className="flex items-center justify-between gap-4">
                   {faq.question}
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#17111a] text-white transition group-open:rotate-45">+</span>
+                  <span aria-hidden="true" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#17111a] text-white transition group-open:rotate-45">+</span>
                 </span>
               </summary>
               <p className="mt-4 max-w-3xl text-base leading-7 text-[#5f4659]">{faq.answer}</p>
@@ -230,7 +230,7 @@ export function LandingPage({
       </section>
 
       <section className="mx-auto max-w-7xl px-5 py-12 pb-20 sm:px-8 sm:py-20 sm:pb-28">
-        <div className="relative overflow-hidden rounded-[2.5rem] bg-[#ff4fa3] p-8 text-white shadow-[0_34px_90px_rgba(255,79,163,0.28)] sm:p-12 lg:p-16">
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-brand p-8 text-white shadow-soft sm:p-12 lg:p-16">
           <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/20" />
           <div className="absolute -bottom-20 left-20 h-64 w-64 rounded-full bg-[#17111a]/15 blur-2xl" />
           <div className="relative flex flex-col justify-between gap-8 lg:flex-row lg:items-center">

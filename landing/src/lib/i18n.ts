@@ -163,12 +163,16 @@ export function getDictionary(locale: Locale): Dictionary {
 }
 
 export function switchLocalePath(pathname: string, nextLocale: Locale): string {
-  const segments = pathname.split('/');
+  const segments = pathname.split('/').filter(Boolean);
 
-  if (isLocale(segments[1] ?? '')) {
-    segments[1] = nextLocale;
-    return segments.join('/') || `/${nextLocale}`;
+  if (segments.length > 0 && isLocale(segments[0])) {
+    segments[0] = nextLocale;
+    return `/${segments.join('/')}`;
   }
 
-  return `/${nextLocale}${pathname.startsWith('/') ? pathname : `/${pathname}`}`;
+  if (segments.length === 0) {
+    return `/${nextLocale}`;
+  }
+
+  return `/${nextLocale}/${segments.join('/')}`;
 }

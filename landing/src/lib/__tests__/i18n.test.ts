@@ -26,5 +26,8 @@ describe('i18n locale helpers', () => {
   it('switches the locale segment in a pathname', () => {
     expect(switchLocalePath('/zh/dashboard', 'en')).toBe('/en/dashboard');
     expect(switchLocalePath('/en', 'zh')).toBe('/zh');
+    expect(switchLocalePath('/', 'en')).toBe('/en');
+    expect(switchLocalePath('/', 'zh')).toBe('/zh');
+    expect(switchLocalePath('/dashboard', 'en')).toBe('/en/dashboard');
   });
 });
