@@ -135,11 +135,12 @@ export function LandingPage({
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {dictionary.landing.valueItems.map((item, index) => (
-              <article key={item} className="rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_20px_60px_rgba(74,32,66,0.08)]">
+              <article key={item.title} className="rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_20px_60px_rgba(74,32,66,0.08)]">
                 <span className="grid h-11 w-11 place-items-center rounded-2xl bg-[#17111a] text-sm font-black text-white">
                   0{index + 1}
                 </span>
-                <p className="mt-8 text-lg font-black leading-7 text-[#231824]">{item}</p>
+                <h3 className="mt-8 text-lg font-black leading-7 text-[#231824]">{item.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#5f4659]">{item.description}</p>
               </article>
             ))}
           </div>
@@ -157,11 +158,14 @@ export function LandingPage({
             </div>
             <ol className="grid gap-4">
               {dictionary.landing.workflowItems.map((item, index) => (
-                <li key={item} className="flex gap-4 rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5">
+                <li key={item.title} className="flex gap-4 rounded-[1.75rem] border border-white/10 bg-white/[0.06] p-5">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand text-sm font-black text-white">
                     {index + 1}
                   </span>
-                  <p className="text-base font-bold leading-7 text-white/82">{item}</p>
+                  <div>
+                    <h3 className="text-base font-black leading-7 text-white">{item.title}</h3>
+                    <p className="mt-1 text-sm leading-6 text-white/75">{item.description}</p>
+                  </div>
                 </li>
               ))}
             </ol>

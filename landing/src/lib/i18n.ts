@@ -20,9 +20,9 @@ export type Dictionary = {
     primaryCta: string;
     secondaryCta: string;
     valueTitle: string;
-    valueItems: string[];
+    valueItems: Array<{ title: string; description: string }>;
     workflowTitle: string;
-    workflowItems: string[];
+    workflowItems: Array<{ title: string; description: string }>;
     platformsTitle: string;
     installTitle: string;
     installSteps: string[];
@@ -68,9 +68,18 @@ const dictionaries: Record<Locale, Dictionary> = {
       primaryCta: '安装 Chrome 插件',
       secondaryCta: '查看控制台',
       valueTitle: '为什么需要对话见证',
-      valueItems: ['跨平台保存重要 AI 回答', '用链上交易证明内容存在时间', '用 Walrus 保留原文与附件'],
+      valueItems: [
+        { title: '链上可验证', description: '每次存证都会写入 Sui 交易和 Witness Object，便于之后核验。' },
+        { title: '内容加密', description: 'Markdown 内容通过 Seal 加密，下载解密需要钱包授权。' },
+        { title: '跨平台保存', description: '统一保存主流 AI 对话平台的关键内容和元数据。' },
+      ],
       workflowTitle: '工作流程',
-      workflowItems: ['在支持的 AI 平台打开插件', '选择需要保存的对话内容', '生成加密存档、Walrus Blob 和 Sui 见证交易'],
+      workflowItems: [
+        { title: '捕获', description: 'Chrome 插件从当前 AI 对话页面提取消息。' },
+        { title: '加密', description: '使用 Seal 对 Markdown 内容加密。' },
+        { title: '存储', description: '加密文件上传到 Walrus。' },
+        { title: '存证', description: 'Sui 交易记录 hash、平台和 Walrus File ID。' },
+      ],
       platformsTitle: '支持 ChatGPT、Claude、Gemini 和 Kimi',
       installTitle: '三步开始',
       installSteps: ['安装浏览器插件', '连接钱包并登录', '在 AI 对话页面点击见证按钮'],
@@ -118,9 +127,18 @@ const dictionaries: Record<Locale, Dictionary> = {
       primaryCta: 'Install Chrome extension',
       secondaryCta: 'Open dashboard',
       valueTitle: 'Why witness conversations',
-      valueItems: ['Save important AI answers across platforms', 'Prove when content existed with on-chain transactions', 'Keep source text and attachments on Walrus'],
+      valueItems: [
+        { title: 'Verifiable on-chain', description: 'Every witness creates a Sui transaction and Witness Object for later verification.' },
+        { title: 'Encrypted content', description: 'Markdown content is Seal encrypted and requires wallet authorization to decrypt.' },
+        { title: 'Cross-platform archive', description: 'Save key content and metadata from major AI conversation platforms.' },
+      ],
       workflowTitle: 'Workflow',
-      workflowItems: ['Open the extension on a supported AI platform', 'Choose the conversation content to preserve', 'Create an encrypted archive, Walrus blob, and Sui witness transaction'],
+      workflowItems: [
+        { title: 'Capture', description: 'The Chrome extension extracts messages from the current AI chat page.' },
+        { title: 'Encrypt', description: 'Seal encrypts the Markdown conversation.' },
+        { title: 'Store', description: 'The encrypted file is uploaded to Walrus.' },
+        { title: 'Witness', description: 'A Sui transaction records the hash, platform, and Walrus File ID.' },
+      ],
       platformsTitle: 'Supports ChatGPT, Claude, Gemini, and Kimi',
       installTitle: 'Start in three steps',
       installSteps: ['Install the browser extension', 'Connect your wallet and sign in', 'Click the witness button on an AI conversation page'],

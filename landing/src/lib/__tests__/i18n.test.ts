@@ -23,6 +23,13 @@ describe('i18n locale helpers', () => {
     expect(getDictionary('en').landing.heroTitle).toContain('AI conversations');
   });
 
+  it('has value items with descriptions and 4 workflow items', () => {
+    expect(getDictionary('zh').landing.valueItems[0].description).toBeDefined();
+    expect(getDictionary('zh').landing.workflowItems).toHaveLength(4);
+    expect(getDictionary('en').landing.valueItems[0].description).toBeDefined();
+    expect(getDictionary('en').landing.workflowItems).toHaveLength(4);
+  });
+
   it('switches the locale segment in a pathname', () => {
     expect(switchLocalePath('/zh/dashboard', 'en')).toBe('/en/dashboard');
     expect(switchLocalePath('/en', 'zh')).toBe('/zh');
