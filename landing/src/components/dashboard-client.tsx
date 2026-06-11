@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ConnectButton } from '@mysten/dapp-kit';
 
 import type { Dictionary, Locale } from '@/lib/i18n';
@@ -46,6 +46,7 @@ function RecordCard({ record, dictionary }: { record: WitnessRecord; dictionary:
           href={txUrl}
           target="_blank"
           rel="noopener noreferrer"
+          aria-label={`View transaction ${record.sui_transaction_digest} in new tab`}
           className="shrink-0 rounded-full bg-brand/10 px-4 py-2 text-xs font-black text-brand transition hover:bg-brand/20"
         >
           {dictionary.dashboard.openTx}
@@ -73,6 +74,8 @@ function RecordCard({ record, dictionary }: { record: WitnessRecord; dictionary:
         <button
           data-record-download
           disabled
+          title="Downloads will be available in a future update"
+          aria-label="Downloads will be available in a future update"
           className="rounded-full bg-[#17111a] px-5 py-2.5 text-sm font-black text-white opacity-50"
         >
           {dictionary.dashboard.downloadMarkdown}
@@ -94,17 +97,31 @@ export function DashboardClient({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   const summary = useMemo(() => getRecordsSummary(records), [records]);
   const hasMore = records.length < total;
 
-  async function loadRecords(nextPage: number = 0) {
+  const loadRecords = useCallback(async (nextPage: number = 0) => {
+    const isRefresh = nextPage === 0;
+    const isLoadMore = nextPage > 0;
+
+    if (isRefresh) {
+      setRefreshing(true);
+    } else if (isLoadMore) {
+      setLoadingMore(true);
+    }
     setStatus(null);
+
     try {
       const currentUser = await getCurrentUser();
       if (!currentUser) {
         setUser(null);
+        setRecords([]);
+        setTotal(0);
+        setPage(0);
         setLoading(false);
         return;
       }
@@ -127,8 +144,10 @@ export function DashboardClient({
       setStatus('Failed to load records. Please try again.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -145,6 +164,7 @@ export function DashboardClient({
           setUser(null);
           setRecords([]);
           setTotal(0);
+          setPage(0);
         }
       }
     });
@@ -153,13 +173,13 @@ export function DashboardClient({
       mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [loadRecords]);
 
   if (loading) {
     return (
       <main className="min-h-screen bg-[#fff7fb] text-[#17111a]">
         <div className="mx-auto flex max-w-7xl items-center justify-center px-5 py-24">
-          <div className="text-lg font-bold text-[#5f4659]">Loading...</div>
+          <div role="status" aria-live="polite" className="text-lg font-bold text-[#5f4659]">Loading...</div>
         </div>
       </main>
     );
@@ -237,7 +257,7 @@ export function DashboardClient({
         </div>
 
         {status && (
-          <div className="mt-6 rounded-[1.5rem] bg-red-50 p-4 text-sm font-bold text-red-700">{status}</div>
+          <div role="alert" className="mt-6 rounded-[1.5rem] bg-red-50 p-4 text-sm font-bold text-red-700">{status}</div>
         )}
 
         <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -268,9 +288,10 @@ export function DashboardClient({
           <h2 className="text-2xl font-black tracking-[-0.03em]">{dictionary.dashboard.records}</h2>
           <button
             onClick={() => loadRecords(0)}
-            className="rounded-full bg-white px-4 py-2 text-sm font-black text-[#17111a] shadow-[0_12px_30px_rgba(23,17,26,0.08)] ring-1 ring-[#2a182f]/10 transition hover:-translate-y-0.5"
+            disabled={refreshing}
+            className="rounded-full bg-white px-4 py-2 text-sm font-black text-[#17111a] shadow-[0_12px_30px_rgba(23,17,26,0.08)] ring-1 ring-[#2a182f]/10 transition hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
-            {dictionary.dashboard.refresh}
+            {refreshing ? 'Refreshing...' : dictionary.dashboard.refresh}
           </button>
         </div>
 
@@ -290,9 +311,10 @@ export function DashboardClient({
           <div className="mt-8 text-center">
             <button
               onClick={() => loadRecords(page + 1)}
-              className="inline-flex items-center justify-center rounded-full bg-white px-7 py-4 text-base font-black text-[#17111a] shadow-[0_18px_44px_rgba(23,17,26,0.08)] transition hover:-translate-y-1"
+              disabled={loadingMore}
+              className="inline-flex items-center justify-center rounded-full bg-white px-7 py-4 text-base font-black text-[#17111a] shadow-[0_18px_44px_rgba(23,17,26,0.08)] transition hover:-translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
             >
-              {dictionary.dashboard.loadMore}
+              {loadingMore ? 'Loading...' : dictionary.dashboard.loadMore}
             </button>
           </div>
         )}
