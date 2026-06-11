@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ConnectButton } from '@mysten/dapp-kit';
+import { ConnectButton, useCurrentAccount, useSignPersonalMessage } from '@mysten/dapp-kit';
 
 import type { Dictionary, Locale } from '@/lib/i18n';
 import {
@@ -15,15 +15,29 @@ import {
 import {
   getRecordsSummary,
   getWitnessRecords,
+  requiresSealDecryptFields,
   type WitnessRecord,
 } from '@/lib/witness-records';
 import { publicConfig } from '@/lib/config';
+import { downloadBytes, downloadMarkdown, safeMarkdownFilename } from '@/lib/download';
 
 const PAGE_SIZE = 10;
 
-function RecordCard({ record, dictionary }: { record: WitnessRecord; dictionary: Dictionary }) {
+function RecordCard({
+  record,
+  dictionary,
+  onDownload,
+  downloadingId,
+}: {
+  record: WitnessRecord;
+  dictionary: Dictionary;
+  onDownload: (record: WitnessRecord) => Promise<void>;
+  downloadingId: string | null;
+}) {
   const title = record.conversation_title || 'Untitled conversation';
   const txUrl = `${publicConfig.suiExplorerBaseUrl}/tx/${record.sui_transaction_digest}`;
+  const isDownloading = downloadingId === record.id;
+  const isSeal = requiresSealDecryptFields(record);
 
   return (
     <article className="rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(74,32,66,0.08)]">
@@ -73,12 +87,15 @@ function RecordCard({ record, dictionary }: { record: WitnessRecord; dictionary:
       <div className="mt-6 flex gap-3">
         <button
           data-record-download
-          disabled
-          title="Downloads will be available in a future update"
-          aria-label="Downloads will be available in a future update"
-          className="rounded-full bg-[#17111a] px-5 py-2.5 text-sm font-black text-white opacity-50"
+          onClick={() => onDownload(record)}
+          disabled={isDownloading}
+          className="rounded-full bg-[#17111a] px-5 py-2.5 text-sm font-black text-white transition hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
         >
-          {dictionary.dashboard.downloadMarkdown}
+          {isDownloading
+            ? dictionary.dashboard.decrypting
+            : isSeal
+              ? dictionary.dashboard.downloadMarkdown
+              : dictionary.dashboard.downloadOriginal}
         </button>
       </div>
     </article>
@@ -100,9 +117,58 @@ export function DashboardClient({
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const currentAccount = useCurrentAccount();
+  const signPersonalMessage = useSignPersonalMessage();
 
   const summary = useMemo(() => getRecordsSummary(records), [records]);
   const hasMore = records.length < total;
+
+  const downloadRecord = useCallback(
+    async (record: WitnessRecord) => {
+      setDownloadingId(record.id);
+      setStatus(null);
+
+      try {
+        const { createSealSessionKey, decryptMarkdown, downloadStoredFile } = await import('@/lib/storage');
+        const encryptedBytes = await downloadStoredFile(record.walrus_blob_id);
+
+        if (!requiresSealDecryptFields(record)) {
+          downloadBytes(encryptedBytes, `${record.walrus_blob_id}.bin`);
+          return;
+        }
+
+        if (!currentAccount) {
+          setStatus('Please connect your wallet to decrypt this record.');
+          return;
+        }
+
+        const sessionKey = await createSealSessionKey(currentAccount.address);
+        const signature = await signPersonalMessage.mutateAsync({
+          message: sessionKey.getPersonalMessage(),
+          account: currentAccount,
+          chain: 'sui:testnet',
+        });
+        await sessionKey.setPersonalMessageSignature(signature.signature);
+
+        const markdown = await decryptMarkdown({
+          encryptedBytes,
+          conversationHash: record.conversation_hash!,
+          witnessObjectId: record.sui_object_id!,
+          sessionKey,
+          sender: currentAccount.address,
+        });
+
+        downloadMarkdown(markdown, safeMarkdownFilename(record.conversation_title));
+      } catch (error) {
+        console.error('Download failed:', error);
+        setStatus(error instanceof Error ? error.message : 'Download failed. Please try again.');
+      } finally {
+        setDownloadingId(null);
+      }
+    },
+    [currentAccount, signPersonalMessage],
+  );
 
   const loadRecords = useCallback(async (nextPage: number = 0) => {
     const isRefresh = nextPage === 0;
@@ -302,7 +368,13 @@ export function DashboardClient({
         ) : (
           <div className="mt-6 space-y-4">
             {records.map((record) => (
-              <RecordCard key={record.id} record={record} dictionary={dictionary} />
+              <RecordCard
+                key={record.id}
+                record={record}
+                dictionary={dictionary}
+                onDownload={downloadRecord}
+                downloadingId={downloadingId}
+              />
             ))}
           </div>
         )}

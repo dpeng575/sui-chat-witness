@@ -1,0 +1,161 @@
+import { EncryptedObject, SealClient, SessionKey } from '@mysten/seal';
+import { SuiGrpcClient } from '@mysten/sui/grpc';
+import { Transaction } from '@mysten/sui/transactions';
+import { walrus } from '@mysten/walrus';
+import { publicConfig } from './config';
+
+function normalizeHex(value: string): string {
+  return value.startsWith('0x') ? value.slice(2).toLowerCase() : value.toLowerCase();
+}
+
+function hexToBytes(hex: string): number[] {
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const bytes: number[] = [];
+
+  for (let i = 0; i < cleanHex.length; i += 2) {
+    bytes.push(parseInt(cleanHex.slice(i, i + 2), 16));
+  }
+
+  return bytes;
+}
+
+function isSealDecryptionError(error: unknown): boolean {
+  return error instanceof Error &&
+    (error.constructor.name === 'DecryptionError' || error.message === 'Decryption failed');
+}
+
+function parseEncryptedObjectMetadata(encryptedBytes: Uint8Array) {
+  try {
+    return EncryptedObject.parse(encryptedBytes);
+  } catch {
+    throw new Error('Walrus file is not a valid Seal encrypted file. Please re-record this conversation with the latest version.');
+  }
+}
+
+function getSealKeyServers() {
+  return publicConfig.sealKeyServers.map((objectId) => ({ objectId, weight: 1 }));
+}
+
+function createStorageClient() {
+  return new SuiGrpcClient({
+    network: publicConfig.suiNetwork,
+    baseUrl: 'https://fullnode.testnet.sui.io:443',
+  }).$extend(
+    walrus({
+      uploadRelay: {
+        host: publicConfig.walrusUploadRelayUrl,
+        sendTip: { max: 1_000 },
+      },
+    }),
+  );
+}
+
+function createSealClient() {
+  const keyServers = getSealKeyServers();
+  if (!publicConfig.sealPackageId || keyServers.length === 0) {
+    throw new Error('Seal is not configured. Please check your environment variables.');
+  }
+
+  return new SealClient({
+    suiClient: createStorageClient(),
+    serverConfigs: keyServers,
+  });
+}
+
+export async function createSealSessionKey(address: string, ttlMin = 10): Promise<SessionKey> {
+  if (!publicConfig.sealNamespacePackageId) {
+    throw new Error('Seal namespace package is not configured.');
+  }
+
+  return SessionKey.create({
+    address,
+    packageId: publicConfig.sealNamespacePackageId,
+    ttlMin,
+    suiClient: createStorageClient(),
+  });
+}
+
+export async function downloadStoredFile(fileId: string): Promise<Uint8Array> {
+  const [file] = await createStorageClient().walrus.getFiles({ ids: [fileId] });
+  if (!file) {
+    throw new Error('Walrus file does not exist or cannot be read.');
+  }
+
+  return file.bytes();
+}
+
+export async function decryptMarkdown({
+  encryptedBytes,
+  conversationHash,
+  witnessObjectId,
+  sessionKey,
+  sender,
+}: {
+  encryptedBytes: Uint8Array;
+  conversationHash: string;
+  witnessObjectId: string;
+  sessionKey: SessionKey;
+  sender: string;
+}): Promise<string> {
+  if (!publicConfig.sealNamespacePackageId) {
+    throw new Error('Seal namespace package is not configured.');
+  }
+
+  const tx = new Transaction();
+  tx.setSender(sender);
+  tx.moveCall({
+    target: `${publicConfig.sealNamespacePackageId}::witness::seal_approve`,
+    arguments: [
+      tx.pure.vector('u8', hexToBytes(conversationHash)),
+      tx.object(witnessObjectId),
+    ],
+  });
+
+  const encryptedObject = parseEncryptedObjectMetadata(encryptedBytes);
+
+  if (encryptedObject.threshold < 1) {
+    throw new Error('Seal threshold in Walrus file is 0, cannot decrypt. Please re-record this conversation.');
+  }
+  if (encryptedObject.packageId !== publicConfig.sealNamespacePackageId) {
+    throw new Error('Seal namespace in Walrus file does not match current configuration. Please re-record this conversation with the latest version.');
+  }
+  if (normalizeHex(encryptedObject.id) !== normalizeHex(conversationHash)) {
+    throw new Error('Seal encryption ID in Walrus file does not match the conversation hash. Please re-record this conversation with the latest version.');
+  }
+
+  console.info('Seal decrypt diagnostics', {
+    encryptedPackageId: encryptedObject.packageId,
+    configuredSealPackageId: publicConfig.sealPackageId,
+    configuredNamespacePackageId: publicConfig.sealNamespacePackageId,
+    encryptedId: encryptedObject.id,
+    conversationHash,
+    threshold: encryptedObject.threshold,
+    keyServerObjectIds: getSealKeyServers().map((server) => server.objectId),
+    witnessObjectId,
+    sender,
+    encryptedBytesLength: encryptedBytes.length,
+  });
+
+  const txBytes = await tx.build({ client: createStorageClient(), onlyTransactionKind: true });
+
+  try {
+    const decrypted = await createSealClient().decrypt({
+      data: encryptedBytes,
+      sessionKey,
+      txBytes,
+      checkShareConsistency: true,
+    });
+
+    return new TextDecoder().decode(decrypted);
+  } catch (error) {
+    console.error('Seal decrypt raw error', {
+      name: error instanceof Error ? error.constructor.name : typeof error,
+      message: error instanceof Error ? error.message : String(error),
+    });
+
+    if (isSealDecryptionError(error)) {
+      throw new Error('Seal decryption verification failed. This usually means the record was generated with an older package/Walrus blob ID/encryption parameters. Please re-record this conversation with the latest version.');
+    }
+    throw error;
+  }
+}
