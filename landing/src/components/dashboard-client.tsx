@@ -11,7 +11,12 @@ import {
   signOut,
   type AppUser,
 } from '@/lib/supabase';
-import { safelySetupAuthStateSubscription, safelySignInWithGoogle } from './dashboard-auth';
+import {
+  getDashboardErrorMessage,
+  isDashboardConfigurationError,
+  safelySetupAuthStateSubscription,
+  safelySignInWithGoogle,
+} from './dashboard-auth';
 import {
   getDashboardDownloadAction,
   getRecordsSummary,
@@ -213,8 +218,10 @@ export function DashboardClient({
       setTotal(result.total);
       setPage(nextPage);
     } catch (error) {
-      console.error('Error loading records:', error);
-      setStatus('Failed to load records. Please try again.');
+      if (!isDashboardConfigurationError(error)) {
+        console.error('Error loading records:', error);
+      }
+      setStatus(getDashboardErrorMessage(error));
     } finally {
       setLoading(false);
       setRefreshing(false);

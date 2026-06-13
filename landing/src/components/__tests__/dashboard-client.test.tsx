@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  getDashboardErrorMessage,
+  isDashboardConfigurationError,
   safelySetupAuthStateSubscription,
   safelySignInWithGoogle,
 } from '../dashboard-auth';
@@ -38,5 +40,16 @@ describe('dashboard missing Supabase config handling', () => {
 
     expect(signIn).toHaveBeenCalledWith('zh');
     expect(setStatus).toHaveBeenCalledWith('NEXT_PUBLIC_SUPABASE_URL is not configured');
+  });
+
+  it('keeps the specific dashboard load error when one is available', () => {
+    expect(getDashboardErrorMessage(missingConfigError)).toBe(
+      'NEXT_PUBLIC_SUPABASE_URL is not configured',
+    );
+  });
+
+  it('identifies expected dashboard configuration errors', () => {
+    expect(isDashboardConfigurationError(missingConfigError)).toBe(true);
+    expect(isDashboardConfigurationError(new Error('network failed'))).toBe(false);
   });
 });

@@ -19,6 +19,14 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+export function getDashboardErrorMessage(error: unknown): string {
+  return getErrorMessage(error, 'Failed to load records. Please try again.');
+}
+
+export function isDashboardConfigurationError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('NEXT_PUBLIC_SUPABASE_');
+}
+
 export function safelySetupAuthStateSubscription({
   getClient = getSupabaseBrowserClient,
   onAuthStateChange,
