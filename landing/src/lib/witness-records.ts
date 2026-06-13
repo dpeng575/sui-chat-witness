@@ -77,3 +77,13 @@ export function requiresSealDecryptFields(record: WitnessRecord): boolean {
       record.walrus_blob_id
   );
 }
+
+export type DashboardDownloadAction = 'original' | 'missing-seal-fields' | 'decrypt-markdown';
+
+export function getDashboardDownloadAction(record: WitnessRecord): DashboardDownloadAction {
+  if (!record.seal_encrypted) {
+    return 'original';
+  }
+
+  return requiresSealDecryptFields(record) ? 'decrypt-markdown' : 'missing-seal-fields';
+}

@@ -10,6 +10,10 @@ function normalizeHex(value: string): string {
 
 function hexToBytes(hex: string): number[] {
   const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (!cleanHex || cleanHex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(cleanHex)) {
+    throw new Error('Conversation hash must be a valid even-length hex string.');
+  }
+
   const bytes: number[] = [];
 
   for (let i = 0; i < cleanHex.length; i += 2) {
@@ -101,27 +105,28 @@ export async function decryptMarkdown({
     throw new Error('Seal namespace package is not configured.');
   }
 
-  const tx = new Transaction();
-  tx.setSender(sender);
-  tx.moveCall({
-    target: `${publicConfig.sealNamespacePackageId}::witness::seal_approve`,
-    arguments: [
-      tx.pure.vector('u8', hexToBytes(conversationHash)),
-      tx.object(witnessObjectId),
-    ],
-  });
-
+  const conversationHashBytes = hexToBytes(conversationHash);
   const encryptedObject = parseEncryptedObjectMetadata(encryptedBytes);
 
   if (encryptedObject.threshold < 1) {
     throw new Error('Seal threshold in Walrus file is 0, cannot decrypt. Please re-record this conversation.');
   }
-  if (encryptedObject.packageId !== publicConfig.sealNamespacePackageId) {
+  if (normalizeHex(encryptedObject.packageId) !== normalizeHex(publicConfig.sealNamespacePackageId)) {
     throw new Error('Seal namespace in Walrus file does not match current configuration. Please re-record this conversation with the latest version.');
   }
   if (normalizeHex(encryptedObject.id) !== normalizeHex(conversationHash)) {
     throw new Error('Seal encryption ID in Walrus file does not match the conversation hash. Please re-record this conversation with the latest version.');
   }
+
+  const tx = new Transaction();
+  tx.setSender(sender);
+  tx.moveCall({
+    target: `${publicConfig.sealNamespacePackageId}::witness::seal_approve`,
+    arguments: [
+      tx.pure.vector('u8', conversationHashBytes),
+      tx.object(witnessObjectId),
+    ],
+  });
 
   console.info('Seal decrypt diagnostics', {
     encryptedPackageId: encryptedObject.packageId,

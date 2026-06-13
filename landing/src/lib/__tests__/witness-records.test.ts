@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getRecordsSummary,
   getPlatformCounts,
+  getDashboardDownloadAction,
   requiresSealDecryptFields,
   type WitnessRecord,
 } from '../witness-records';
@@ -111,6 +112,22 @@ describe('witness-records', () => {
     it('should return false when walrus_blob_id is missing', () => {
       const record = { ...mockRecords[0], walrus_blob_id: undefined };
       expect(requiresSealDecryptFields(record)).toBe(false);
+    });
+  });
+
+  describe('getDashboardDownloadAction', () => {
+    it('treats unencrypted records as original downloads', () => {
+      expect(getDashboardDownloadAction(mockRecords[1])).toBe('original');
+      expect(getDashboardDownloadAction(mockRecords[2])).toBe('original');
+    });
+
+    it('does not treat encrypted records missing decrypt fields as original downloads', () => {
+      const record = { ...mockRecords[0], conversation_hash: undefined };
+      expect(getDashboardDownloadAction(record)).toBe('missing-seal-fields');
+    });
+
+    it('treats encrypted records with all decrypt fields as decryptable markdown', () => {
+      expect(getDashboardDownloadAction(mockRecords[0])).toBe('decrypt-markdown');
     });
   });
 });

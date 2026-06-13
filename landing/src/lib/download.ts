@@ -1,6 +1,6 @@
 export function safeMarkdownFilename(value?: string): string {
-  const filename = (value || 'conversation').trim().replace(/[\\/:*?"<>|]/g, '-');
-  return filename || 'conversation';
+  const filename = (value || 'conversation').trim().replace(/[\\/:*?"<>|]/g, '-') || 'conversation';
+  return filename.endsWith('.md') ? filename : `${filename}.md`;
 }
 
 export function downloadBytes(data: Uint8Array, filename: string): void {

@@ -13,9 +13,9 @@ import {
   type AppUser,
 } from '@/lib/supabase';
 import {
+  getDashboardDownloadAction,
   getRecordsSummary,
   getWitnessRecords,
-  requiresSealDecryptFields,
   type WitnessRecord,
 } from '@/lib/witness-records';
 import { publicConfig } from '@/lib/config';
@@ -37,7 +37,7 @@ function RecordCard({
   const title = record.conversation_title || 'Untitled conversation';
   const txUrl = `${publicConfig.suiExplorerBaseUrl}/tx/${record.sui_transaction_digest}`;
   const isDownloading = downloadingId === record.id;
-  const isSeal = requiresSealDecryptFields(record);
+  const isSeal = Boolean(record.seal_encrypted);
 
   return (
     <article className="rounded-[2rem] border border-[#2a182f]/10 bg-white/75 p-6 shadow-[0_18px_50px_rgba(74,32,66,0.08)]">
@@ -131,10 +131,16 @@ export function DashboardClient({
 
       try {
         const { createSealSessionKey, decryptMarkdown, downloadStoredFile } = await import('@/lib/storage');
-        const encryptedBytes = await downloadStoredFile(record.walrus_blob_id);
+        const downloadAction = getDashboardDownloadAction(record);
 
-        if (!requiresSealDecryptFields(record)) {
-          downloadBytes(encryptedBytes, `${record.walrus_blob_id}.bin`);
+        if (downloadAction === 'original') {
+          const bytes = await downloadStoredFile(record.walrus_blob_id);
+          downloadBytes(bytes, `${record.walrus_blob_id}.bin`);
+          return;
+        }
+
+        if (downloadAction === 'missing-seal-fields') {
+          setStatus(dictionary.dashboard.missingSealFields);
           return;
         }
 
@@ -143,6 +149,7 @@ export function DashboardClient({
           return;
         }
 
+        const encryptedBytes = await downloadStoredFile(record.walrus_blob_id);
         const sessionKey = await createSealSessionKey(currentAccount.address);
         const signature = await signPersonalMessage.mutateAsync({
           message: sessionKey.getPersonalMessage(),
@@ -167,7 +174,7 @@ export function DashboardClient({
         setDownloadingId(null);
       }
     },
-    [currentAccount, signPersonalMessage],
+    [currentAccount, dictionary.dashboard.missingSealFields, signPersonalMessage],
   );
 
   const loadRecords = useCallback(async (nextPage: number = 0) => {
