@@ -8,10 +8,10 @@ import type { Dictionary, Locale } from '@/lib/i18n';
 import {
   getCurrentUser,
   getSupabaseBrowserClient,
-  signInWithGoogle,
   signOut,
   type AppUser,
 } from '@/lib/supabase';
+import { safelySetupAuthStateSubscription, safelySignInWithGoogle } from './dashboard-auth';
 import {
   getDashboardDownloadAction,
   getRecordsSummary,
@@ -227,24 +227,26 @@ export function DashboardClient({
 
     loadRecords(0);
 
-    const {
-      data: { subscription },
-    } = getSupabaseBrowserClient().auth.onAuthStateChange(async (event, session) => {
-      if (mounted) {
-        if (session?.user) {
-          loadRecords(0);
-        } else {
-          setUser(null);
-          setRecords([]);
-          setTotal(0);
-          setPage(0);
+    const subscription = safelySetupAuthStateSubscription({
+      onAuthStateChange: async (event, session) => {
+        if (mounted) {
+          if (session?.user) {
+            loadRecords(0);
+          } else {
+            setUser(null);
+            setRecords([]);
+            setTotal(0);
+            setPage(0);
+          }
         }
-      }
+      },
+      setStatus,
+      setLoading,
     });
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
   }, [loadRecords]);
 
@@ -282,8 +284,11 @@ export function DashboardClient({
         <div className="mx-auto max-w-2xl px-5 py-24 text-center">
           <h1 className="text-4xl font-black tracking-[-0.04em] sm:text-5xl">{dictionary.dashboard.title}</h1>
           <p className="mt-4 text-lg text-[#5f4659]">{dictionary.dashboard.loginRequired}</p>
+          {status && (
+            <div role="alert" className="mt-6 rounded-[1.5rem] bg-red-50 p-4 text-sm font-bold text-red-700">{status}</div>
+          )}
           <button
-            onClick={() => signInWithGoogle(locale)}
+            onClick={() => safelySignInWithGoogle(locale, setStatus)}
             className="mt-8 inline-flex items-center justify-center rounded-full bg-brand px-7 py-4 text-base font-black text-white shadow-soft transition hover:-translate-y-1 hover:opacity-90"
           >
             {dictionary.nav.signIn}
