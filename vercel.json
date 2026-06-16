@@ -1,0 +1,6 @@
+{
+  "buildCommand": "npm install --prefix landing && npm run build --prefix landing",
+  "installCommand": "echo 'skip root install'",
+  "framework": "nextjs",
+  "outputDirectory": "landing/.next"
+}
