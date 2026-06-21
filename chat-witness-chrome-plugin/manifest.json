@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Sui-Seal: AI 对话存证",
+  "name": "chat-witness: AI Conversation Archive",
   "version": "0.1.0",
-  "description": "一键将 AI 对话永久存证到 Sui 区块链，支持跨平台迁移和导出",
+  "description": "Archive AI conversations permanently on Sui blockchain with encrypted Walrus storage and verifiable witness proof",
   "permissions": ["storage", "identity", "activeTab", "tabs"],
   "host_permissions": [
     "https://chat.openai.com/*",

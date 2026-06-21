@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { conversationToMarkdown, downloadMarkdown, generateFilename } from '../utils/export';
 import { prepareWitness } from '../lib/witness';
@@ -6,9 +6,55 @@ import { getWitnessRecords } from '../db';
 import type { WitnessRecord } from '../db/types';
 import { downloadFromWalrus, downloadWalrusBlob } from '../lib/walrus';
 import type { Conversation } from '../adapters/interface';
+import logoUrl from '../assets/Chat-Witness-logo.png';
 
 const SIGNER_URL = import.meta.env.VITE_SIGNER_URL || 'http://localhost:5173/signer.html';
 const RECORDS_PAGE_SIZE = 5;
+
+const aiPlatforms = [
+  {
+    name: 'ChatGPT',
+    url: 'https://chat.openai.com/',
+    color: '#10a37f',
+    logo: (
+      <svg viewBox="0 0 48 48" aria-hidden="true" className="h-6 w-6">
+        <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" d="M24 7.5c5.5 0 8.6 3.4 9.4 7.4 4.1 1.2 7.1 4.7 7.1 9.1 0 5.1-3.9 8.9-8.7 9.5-1.4 4.1-5 7-9.6 7-4.5 0-7.7-2.7-9.1-6.4-4.3-1-7.6-4.7-7.6-9.2 0-4.7 3.3-8.1 7.3-9.2C14 11 17.9 7.5 24 7.5Z" />
+        <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.4" d="M16.2 16.6 24 12l7.8 4.6v9.1L24 30.3l-7.8-4.6v-9.1Zm15.6 0L24 21.1m0-9.1v9.1m0 9.2v5.8m-7.8-10.4L24 21.1l7.8 4.6" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Claude',
+    url: 'https://claude.ai/',
+    color: '#d97757',
+    logo: (
+      <svg viewBox="0 0 48 48" aria-hidden="true" className="h-6 w-6">
+        <path fill="currentColor" d="M23.8 6 42 40H31.8l-3-6.2h-10L15.9 40H6L23.8 6Zm1.1 17.1-3.1 6.8h5.9l-2.8-6.8Z" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Gemini',
+    url: 'https://gemini.google.com/',
+    color: '#8b5cf6',
+    logo: (
+      <svg viewBox="0 0 48 48" aria-hidden="true" className="h-6 w-6">
+        <path fill="currentColor" d="M24 4c2.4 11.1 8.9 17.6 20 20-11.1 2.4-17.6 8.9-20 20C21.6 32.9 15.1 26.4 4 24 15.1 21.6 21.6 15.1 24 4Z" />
+      </svg>
+    ),
+  },
+  {
+    name: 'Kimi',
+    url: 'https://kimi.moonshot.cn/',
+    color: '#94a3b8',
+    logo: (
+      <svg viewBox="0 0 48 48" aria-hidden="true" className="h-6 w-6">
+        <path fill="currentColor" d="M33.9 7.4A18.8 18.8 0 1 0 41 33.1 14.7 14.7 0 1 1 33.9 7.4Z" />
+        <path fill="rgb(226, 61, 124)" d="M32 18.5 36 21l4-2.5-2.5 4 2.5 4-4-2.5-4 2.5 2.5-4-2.5-4Z" />
+      </svg>
+    ),
+  },
+];
 
 function App() {
   const { user, loading, signInWithGoogle, signOut } = useAuth();
@@ -42,8 +88,11 @@ function App() {
         console.log('[Popup] Detected platform:', response.platform);
       }
     } catch {
-      // Content script may not be available on non-chat pages.
     }
+  }
+
+  async function openPlatform(url: string) {
+    await chrome.tabs.create({ url, active: true });
   }
 
   async function extractConversation() {
@@ -61,13 +110,13 @@ function App() {
       console.log('[Popup] Received response:', response);
       if (response?.success && response.conversation) {
         setConversation(response.conversation);
-        showStatus('对话已提取！', 'success');
+        showStatus('Conversation extracted.', 'success');
       } else {
-        showStatus(response?.error || '无法提取对话', 'error');
+        showStatus(response?.error || 'Unable to extract conversation', 'error');
       }
     } catch (e) {
       console.log('[Popup] Error:', e);
-      showStatus('无法连接到页面，请刷新后重试', 'error');
+      showStatus('Unable to connect to this page. Refresh and try again.', 'error');
     } finally {
       setIsExtracting(false);
     }
@@ -75,7 +124,7 @@ function App() {
 
   async function exportToMarkdown() {
     if (!conversation) {
-      showStatus('没有可导出的对话', 'error');
+      showStatus('No conversation available to export', 'error');
       return;
     }
 
@@ -84,12 +133,12 @@ function App() {
     console.log('[Popup] Generated markdown:', markdown);
     const filename = generateFilename(conversation);
     downloadMarkdown(markdown, filename);
-    showStatus('对话已导出！', 'success');
+    showStatus('Conversation exported.', 'success');
   }
 
   async function witnessToChain() {
     if (!conversation) {
-      showStatus('没有可存证的对话', 'error');
+      showStatus('No conversation available to witness', 'error');
       return;
     }
 
@@ -98,7 +147,7 @@ function App() {
     setStatusMessage(null);
 
     try {
-      showStatus('正在准备存证...', 'success');
+      showStatus('Preparing witness...', 'success');
 
       const prepared = await prepareWitness(
         conversation.messages,
@@ -109,7 +158,7 @@ function App() {
 
       if (!prepared.success || !prepared.witnessRecordId || !prepared.walrusBlobId || !prepared.conversationHash) {
         setWitnessResult(prepared);
-        showStatus(prepared.error || '存证准备失败', 'error');
+        showStatus(prepared.error || 'Failed to prepare witness', 'error');
         return;
       }
 
@@ -138,10 +187,10 @@ function App() {
         conversationHash: prepared.conversationHash,
       });
       await loadWitnessRecords(0);
-      showStatus('已打开钱包签名页面，请在新页面完成交易', 'success');
+      showStatus('Wallet signing page opened. Complete the transaction there.', 'success');
     } catch (error) {
       console.error('[Popup] Witness error:', error);
-      const message = error instanceof Error ? error.message : '存证失败';
+      const message = error instanceof Error ? error.message : 'Witness failed';
       setWitnessResult({ success: false, error: message });
       showStatus(message, 'error');
     } finally {
@@ -158,7 +207,7 @@ function App() {
       setRecordsPage(page);
     } catch (error) {
       console.error('[Popup] Load records error:', error);
-      showStatus('加载存证记录失败', 'error');
+      showStatus('Failed to load witness records', 'error');
     } finally {
       setIsLoadingRecords(false);
     }
@@ -167,7 +216,7 @@ function App() {
   async function downloadRecordBlob(record: WitnessRecord) {
     if (record.seal_encrypted) {
       if (!record.sui_object_id || !record.conversation_hash) {
-        showStatus('这条记录缺少 Seal 解密所需的链上对象 ID 或对话哈希，请重新存证生成新记录。', 'error');
+        showStatus('This record is missing the on-chain object ID or conversation hash required for Seal decryption.', 'error');
         return;
       }
 
@@ -184,7 +233,7 @@ function App() {
         url: `${SIGNER_URL}#${encodeURIComponent(JSON.stringify(payload))}`,
         active: true,
       });
-      showStatus('已打开钱包解密页面，请连接拥有该记录的钱包', 'success');
+      showStatus('Wallet decrypt page opened. Connect the wallet that owns this record.', 'success');
       return;
     }
 
@@ -192,10 +241,10 @@ function App() {
     try {
       const bytes = await downloadFromWalrus(record.walrus_blob_id);
       downloadWalrusBlob(record.walrus_blob_id, bytes);
-      showStatus('Walrus 原文件已开始下载', 'success');
+      showStatus('Walrus source file download started.', 'success');
     } catch (error) {
       console.error('[Popup] Download Walrus blob error:', error);
-      showStatus(error instanceof Error ? error.message : '下载 Walrus 文件失败', 'error');
+      showStatus(error instanceof Error ? error.message : 'Failed to download Walrus file', 'error');
     } finally {
       setDownloadingBlobId(null);
     }
@@ -208,275 +257,306 @@ function App() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 p-4 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+      <div className="min-h-screen w-full bg-[#070711] p-4 text-white">
+        <div className="grid min-h-[480px] place-items-center">
+          <div className="h-8 w-8 animate-spin border-2 border-white/15 border-b-brand" />
+        </div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="w-full min-h-screen bg-gray-50 p-4">
-        <div className="text-center">
-          <div className="text-3xl mb-2">🦭</div>
-          <h1 className="text-xl font-bold text-gray-800 mb-1">Sui-Seal</h1>
-          <p className="text-sm text-gray-500 mb-6">AI 对话永久存证</p>
-        </div>
-
-        <div className="space-y-3">
-          <button
-            onClick={signInWithGoogle}
-            className="w-full py-3 px-4 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            使用 Google 账号登录
-          </button>
+      <div className="min-h-screen w-full bg-[#070711] p-4 text-white">
+        <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(226,61,124,0.32),transparent_36%),linear-gradient(180deg,#080814_0%,#10101d_55%,#070711_100%)]" />
+        <div className="relative space-y-5">
+          <BrandHeader />
+          <PlatformShortcuts onOpenPlatform={openPlatform} />
+          <section className="border border-white/10 bg-white/[0.06] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.3)] backdrop-blur">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff8fbd]">Secure archive</p>
+            <h1 className="mt-3 text-2xl font-black tracking-[-0.05em]">Capture AI conversations with verifiable proof.</h1>
+            <p className="mt-2 text-sm leading-6 text-white/62">Sign in to sync witness records and manage encrypted exports.</p>
+            <button
+              onClick={signInWithGoogle}
+              className="mt-5 flex w-full items-center justify-center gap-2 bg-brand px-4 py-3 text-sm font-black text-white shadow-[0_18px_52px_rgba(226,61,124,0.34)] transition hover:-translate-y-0.5"
+            >
+              <GoogleIcon />
+              Sign in with Google
+            </button>
+          </section>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full min-h-screen bg-gray-50 p-4">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          {user.avatarUrl ? (
-            <img
-              src={user.avatarUrl}
-              alt={user.name || user.email}
-              className="w-10 h-10 rounded-full"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium">
-              {(user.name || user.email).charAt(0).toUpperCase()}
-            </div>
-          )}
-          <div>
-            <div className="font-medium text-gray-800 text-sm">
-              {user.name || '用户'}
-            </div>
-            <div className="text-xs text-gray-500">{user.email}</div>
+    <div className="min-h-screen w-full bg-[#070711] p-4 text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(226,61,124,0.32),transparent_36%),linear-gradient(180deg,#080814_0%,#10101d_55%,#070711_100%)]" />
+      <div className="relative space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <BrandHeader compact />
+          <button
+            onClick={signOut}
+            className="border border-white/12 bg-white/[0.06] px-3 py-2 text-xs font-bold text-white/78 transition hover:bg-white/[0.12]"
+          >
+            Sign out
+          </button>
+        </div>
+
+        <PlatformShortcuts onOpenPlatform={openPlatform} />
+
+        {statusMessage && (
+          <div className={`border p-3 text-sm font-bold ${
+            statusMessage.type === 'error'
+              ? 'border-red-400/30 bg-red-500/10 text-red-200'
+              : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+          }`}>
+            {statusMessage.text}
           </div>
-        </div>
-        <button
-          onClick={signOut}
-          className="text-xs text-gray-500 hover:text-gray-700"
-        >
-          退出
-        </button>
-      </div>
-
-      {statusMessage && (
-        <div className={`mb-4 p-3 rounded-lg text-sm ${
-          statusMessage.type === 'error'
-            ? 'bg-red-50 text-red-700 border border-red-200'
-            : 'bg-green-50 text-green-700 border border-green-200'
-        }`}>
-          {statusMessage.text}
-        </div>
-      )}
-
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-        <div className="text-sm text-blue-800 font-medium mb-1">🦭 Sui-Seal</div>
-        <div className="text-xs text-blue-600">
-          {currentPlatform
-            ? `已检测到: ${currentPlatform}`
-            : '请在 AI 对话页面使用此插件'}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
-          对话操作
-        </div>
-
-        <button
-          onClick={extractConversation}
-          disabled={isExtracting || !currentPlatform}
-          className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-        >
-          <span>{isExtracting ? '⏳' : '📥'}</span>
-          {isExtracting ? '提取中...' : '提取当前对话'}
-        </button>
-
-        {conversation && (
-          <>
-            <button
-              onClick={exportToMarkdown}
-              className="w-full py-2.5 px-4 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-            >
-              <span>📄</span>
-              导出 Markdown
-            </button>
-
-            <div className="bg-gray-100 rounded-lg p-3">
-              <div className="text-xs font-medium text-gray-500 mb-2">已提取对话</div>
-              <div className="text-sm text-gray-700 truncate">{conversation.title}</div>
-              <div className="text-xs text-gray-500">{conversation.messages.length} 条消息</div>
-            </div>
-          </>
         )}
 
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
-          钱包操作
-        </div>
+        <section className="border border-white/10 bg-white/[0.06] p-4 shadow-[0_20px_60px_rgba(0,0,0,0.3)] backdrop-blur">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff8fbd]">Active target</p>
+              <h2 className="mt-1 text-lg font-black text-white">{currentPlatform || 'No supported page detected'}</h2>
+              <p className="mt-1 text-xs leading-5 text-white/55">
+                {currentPlatform ? 'Ready to extract the current conversation.' : 'Open an AI chat page and refresh detection.'}
+              </p>
+            </div>
+            <div className="grid h-11 w-11 place-items-center border border-brand/35 bg-brand/15 text-brand">
+              <CaptureIcon />
+            </div>
+          </div>
+        </section>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
-          钱包连接将在普通 HTTP 签名页中完成，以便 Sui Wallet / Slush 能正常注入。
-        </div>
+        <section className="space-y-3">
+          <SectionTitle>Conversation actions</SectionTitle>
+          <button
+            onClick={extractConversation}
+            disabled={isExtracting || !currentPlatform}
+            className="flex w-full items-center justify-center gap-2 border border-white/12 bg-white/[0.06] px-4 py-3 text-sm font-black text-white transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <span>{isExtracting ? '...' : '↓'}</span>
+            {isExtracting ? 'Extracting...' : 'Extract current conversation'}
+          </button>
 
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
-          区块链存证
-        </div>
-        <button
-          onClick={witnessToChain}
-          disabled={!conversation || isWitnessing}
-          className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
-        >
-          <span>{isWitnessing ? '⏳' : '🔐'}</span>
-          {isWitnessing ? '存证准备中...' : '打开钱包签名页'}
-        </button>
+          {conversation && (
+            <>
+              <button
+                onClick={exportToMarkdown}
+                className="flex w-full items-center justify-center gap-2 border border-white/12 bg-white/[0.06] px-4 py-3 text-sm font-black text-white transition hover:bg-white/[0.12]"
+              >
+                <MarkdownIcon />
+                Export Markdown
+              </button>
 
-        <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2 mt-5">
-          存证记录
-        </div>
+              <div className="border border-white/10 bg-white/[0.05] p-3">
+                <div className="text-xs font-black uppercase tracking-[0.14em] text-white/42">Extracted conversation</div>
+                <div className="mt-2 truncate text-sm font-bold text-white">{conversation.title}</div>
+                <div className="text-xs text-white/52">{conversation.messages.length} messages</div>
+              </div>
+            </>
+          )}
+        </section>
 
-        <div className="bg-white border border-gray-200 rounded-lg p-3 space-y-3">
+        <section className="space-y-3">
+          <SectionTitle>Wallet signing</SectionTitle>
+          <div className="border border-brand/25 bg-brand/10 p-3 text-xs leading-5 text-white/68">
+            Wallet signing opens in a normal HTTP page so Sui Wallet / Slush can inject correctly.
+          </div>
+          <button
+            onClick={witnessToChain}
+            disabled={!conversation || isWitnessing}
+            className="flex w-full items-center justify-center gap-2 bg-brand px-4 py-3 text-sm font-black text-white shadow-[0_18px_52px_rgba(226,61,124,0.34)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            <span>{isWitnessing ? '...' : '◇'}</span>
+            {isWitnessing ? 'Preparing witness...' : 'Open wallet signing page'}
+          </button>
+        </section>
+
+        <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <div className="text-sm font-medium text-gray-800">最近记录</div>
+            <SectionTitle>Witness records</SectionTitle>
             <button
               onClick={() => loadWitnessRecords(recordsPage)}
               disabled={isLoadingRecords}
-              className="text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              className="text-xs font-black text-[#ff8fbd] transition hover:text-white disabled:opacity-50"
             >
-              {isLoadingRecords ? '加载中...' : '刷新'}
+              {isLoadingRecords ? 'Loading...' : 'Refresh'}
             </button>
           </div>
 
-          {records.length === 0 ? (
-            <div className="text-xs text-gray-500 py-2">
-              {isLoadingRecords ? '正在加载存证记录...' : '暂无存证记录'}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {records.map((record) => (
-                <div key={record.id} className="bg-gray-50 border border-gray-100 rounded-lg p-2">
+          <div className="space-y-2 border border-white/10 bg-white/[0.06] p-3">
+            {records.length === 0 ? (
+              <div className="py-2 text-xs text-white/52">
+                {isLoadingRecords ? 'Loading witness records...' : 'No witness records yet.'}
+              </div>
+            ) : (
+              records.map((record) => (
+                <div key={record.id} className="border border-white/10 bg-[#0b0b18]/70 p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-xs font-medium text-gray-800 truncate">
+                      <div className="truncate text-xs font-black text-white">
                         {record.conversation_title || record.platform}
                       </div>
-                      <div className="text-[11px] text-gray-500">
+                      <div className="text-[11px] text-white/45">
                         {new Date(record.created_at).toLocaleString()}
                       </div>
                     </div>
                     <button
                       onClick={() => downloadRecordBlob(record)}
                       disabled={downloadingBlobId === record.walrus_blob_id}
-                      className="shrink-0 text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                      className="shrink-0 text-xs font-black text-[#ff8fbd] transition hover:text-white disabled:opacity-50"
                     >
-                      {downloadingBlobId === record.walrus_blob_id ? '下载中...' : record.seal_encrypted ? '解密 Markdown' : '下载原文件'}
+                      {downloadingBlobId === record.walrus_blob_id ? 'Downloading...' : record.seal_encrypted ? 'Decrypt Markdown' : 'Download source'}
                     </button>
                   </div>
 
-                  <div className="mt-2 space-y-1 text-[11px] text-gray-600">
-                    <div>
-                      <span className="font-medium">Walrus:</span>
-                      <span className="font-mono ml-1 break-all">{record.walrus_blob_id}</span>
-                    </div>
-                    <div>
-                      <span className="font-medium">交易:</span>
-                      <span className="font-mono ml-1 break-all">{record.sui_transaction_digest}</span>
-                    </div>
-                    {record.sui_object_id && (
-                      <div>
-                        <span className="font-medium">对象:</span>
-                        <span className="font-mono ml-1 break-all">{record.sui_object_id}</span>
-                      </div>
-                    )}
+                  <div className="mt-2 space-y-1 text-[11px] text-white/52">
+                    <RecordMeta label="Walrus" value={record.walrus_blob_id} />
+                    <RecordMeta label="Tx" value={record.sui_transaction_digest} />
+                    {record.sui_object_id && <RecordMeta label="Object" value={record.sui_object_id} />}
                     {record.walrus_storage_start_at && (
                       <div>
-                        <span className="font-medium">存储开始:</span>
+                        <span className="font-bold text-white/68">Storage start:</span>
                         <span className="ml-1">{new Date(record.walrus_storage_start_at).toLocaleString()}</span>
                       </div>
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              ))
+            )}
 
-          <div className="flex items-center justify-between pt-1">
-            <button
-              onClick={() => loadWitnessRecords(recordsPage - 1)}
-              disabled={recordsPage === 0 || isLoadingRecords}
-              className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-40"
-            >
-              上一页
-            </button>
-            <div className="text-xs text-gray-500">
-              第 {recordsPage + 1} 页 / 共 {Math.max(1, Math.ceil(recordsTotal / RECORDS_PAGE_SIZE))} 页
+            <div className="flex items-center justify-between border-t border-white/10 pt-3">
+              <button
+                onClick={() => loadWitnessRecords(recordsPage - 1)}
+                disabled={recordsPage === 0 || isLoadingRecords}
+                className="text-xs font-bold text-white/58 transition hover:text-white disabled:opacity-30"
+              >
+                Previous
+              </button>
+              <div className="text-xs text-white/45">
+                Page {recordsPage + 1} / {Math.max(1, Math.ceil(recordsTotal / RECORDS_PAGE_SIZE))}
+              </div>
+              <button
+                onClick={() => loadWitnessRecords(recordsPage + 1)}
+                disabled={(recordsPage + 1) * RECORDS_PAGE_SIZE >= recordsTotal || isLoadingRecords}
+                className="text-xs font-bold text-white/58 transition hover:text-white disabled:opacity-30"
+              >
+                Next
+              </button>
             </div>
-            <button
-              onClick={() => loadWitnessRecords(recordsPage + 1)}
-              disabled={(recordsPage + 1) * RECORDS_PAGE_SIZE >= recordsTotal || isLoadingRecords}
-              className="text-xs text-gray-600 hover:text-gray-800 disabled:opacity-40"
-            >
-              下一页
-            </button>
           </div>
-        </div>
+        </section>
 
         {witnessResult && (
-          <div className={`rounded-lg p-3 mt-3 ${
+          <div className={`border p-3 ${
             witnessResult.success
-              ? 'bg-green-50 border border-green-200'
-              : 'bg-red-50 border border-red-200'
+              ? 'border-emerald-400/30 bg-emerald-500/10'
+              : 'border-red-400/30 bg-red-500/10'
           }`}>
-            <div className={`text-sm font-medium mb-2 ${
-              witnessResult.success ? 'text-green-800' : 'text-red-800'
+            <div className={`mb-2 text-sm font-black ${
+              witnessResult.success ? 'text-emerald-200' : 'text-red-200'
             }`}>
-              {witnessResult.success ? '存证成功！' : '存证失败'}
+              {witnessResult.success ? 'Witness created' : 'Witness failed'}
             </div>
             {witnessResult.success && witnessResult.suiTransactionDigest && (
               <div className="space-y-1">
-                <div className="text-xs text-green-700">
-                  <span className="font-medium">交易:</span>
+                <div className="text-xs text-emerald-200/80">
+                  <span className="font-bold">Tx:</span>
                   <a
                     href={`https://suiscan.xyz/testnet/tx/${witnessResult.suiTransactionDigest}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-green-600 underline ml-1"
+                    className="ml-1 font-mono underline"
                   >
                     {witnessResult.suiTransactionDigest.substring(0, 16)}...
                   </a>
                 </div>
-                {witnessResult.walrusBlobId && (
-                  <div className="text-xs text-green-700">
-                    <span className="font-medium">Walrus:</span>
-                    <span className="font-mono ml-1">{witnessResult.walrusBlobId.substring(0, 16)}...</span>
-                  </div>
-                )}
-                {witnessResult.conversationHash && (
-                  <div className="text-xs text-green-700">
-                    <span className="font-medium">哈希:</span>
-                    <span className="font-mono ml-1">{witnessResult.conversationHash.substring(0, 16)}...</span>
-                  </div>
-                )}
+                {witnessResult.walrusBlobId && <RecordMeta label="Walrus" value={`${witnessResult.walrusBlobId.substring(0, 16)}...`} />}
+                {witnessResult.conversationHash && <RecordMeta label="Hash" value={`${witnessResult.conversationHash.substring(0, 16)}...`} />}
               </div>
             )}
             {!witnessResult.success && witnessResult.error && (
-              <div className="text-xs text-red-700">{witnessResult.error}</div>
+              <div className="text-xs text-red-200/80">{witnessResult.error}</div>
             )}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+function BrandHeader({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className={`${compact ? 'h-10 w-10' : 'h-12 w-12'} overflow-hidden rounded-2xl border border-white/20 bg-white shadow-[0_0_34px_rgba(226,61,124,0.38)]`}>
+        <img src={logoUrl} alt="chat-witness logo" className="h-full w-full object-cover" />
+      </div>
+      <div>
+        <div className="text-sm font-black uppercase tracking-[0.2em] text-white">chat-witness</div>
+        {!compact && <div className="text-xs font-semibold text-white/52">AI Conversation Archive</div>}
+      </div>
+    </div>
+  );
+}
+
+function PlatformShortcuts({ onOpenPlatform }: { onOpenPlatform: (url: string) => Promise<void> }) {
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {aiPlatforms.map((platform) => (
+        <button
+          key={platform.name}
+          onClick={() => onOpenPlatform(platform.url)}
+          title={platform.name}
+          className="grid h-12 place-items-center border border-white/10 bg-white/[0.06] shadow-[0_10px_30px_rgba(0,0,0,0.18)] transition hover:-translate-y-0.5 hover:border-brand/50 hover:bg-brand/10"
+          style={{ color: platform.color }}
+        >
+          {platform.logo}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <div className="text-xs font-black uppercase tracking-[0.18em] text-white/48">{children}</div>;
+}
+
+function RecordMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="font-bold text-white/68">{label}:</span>
+      <span className="ml-1 break-all font-mono">{value}</span>
+    </div>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+    </svg>
+  );
+}
+
+function CaptureIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-6 w-6">
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5h14v14H5zM8 9h8M8 13h5" />
+    </svg>
+  );
+}
+
+function MarkdownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16v12H4zM7 15V9l3 3 3-3v6m4-6v6m-2-2 2 2 2-2" />
+    </svg>
   );
 }
 
