@@ -2,7 +2,7 @@ export const locales = ['zh', 'en'] as const;
 
 export type Locale = (typeof locales)[number];
 
-export const defaultLocale: Locale = 'zh';
+export const defaultLocale: Locale = 'en';
 
 export type Dictionary = {
   nav: {
@@ -26,6 +26,9 @@ export type Dictionary = {
     platformsTitle: string;
     installTitle: string;
     installSteps: string[];
+    extensionInstallTitle: string;
+    extensionInstallDescription: string;
+    extensionInstallSteps: string[];
     faqTitle: string;
     faqs: Array<{ question: string; answer: string }>;
     finalTitle: string;
@@ -40,7 +43,6 @@ export type Dictionary = {
     records: string;
     empty: string;
     refresh: string;
-    loadMore: string;
     openTx: string;
     downloadMarkdown: string;
     downloadOriginal: string;
@@ -48,6 +50,16 @@ export type Dictionary = {
     decrypting: string;
     missingSealFields: string;
     loginRequired: string;
+    tableTitle: string;
+    tablePlatform: string;
+    tableMessages: string;
+    tableCreated: string;
+    tableWalrus: string;
+    tableTransaction: string;
+    tableActions: string;
+    previousPage: string;
+    nextPage: string;
+    loadingPage: string;
   };
 };
 
@@ -64,7 +76,7 @@ const dictionaries: Record<Locale, Dictionary> = {
     landing: {
       badge: 'Sui + Walrus 上的 AI 对话见证层',
       heroTitle: '为每一次 AI 对话生成可信见证',
-      heroSubtitle: 'Sui-Seal 自动保存 ChatGPT、Claude、Gemini 和 Kimi 的关键对话，并用 Sui 与 Walrus 留下可验证记录。',
+      heroSubtitle: 'chat-witness 自动保存 ChatGPT、Claude、Gemini 和 Kimi 的关键对话，并用 Sui 与 Walrus 留下可验证记录。',
       primaryCta: '安装 Chrome 插件',
       secondaryCta: '查看控制台',
       valueTitle: '为什么需要对话见证',
@@ -83,6 +95,9 @@ const dictionaries: Record<Locale, Dictionary> = {
       platformsTitle: '支持 ChatGPT、Claude、Gemini 和 Kimi',
       installTitle: '三步开始',
       installSteps: ['安装浏览器插件', '连接钱包并登录', '在 AI 对话页面点击见证按钮'],
+      extensionInstallTitle: '下载插件压缩包后安装',
+      extensionInstallDescription: '如果浏览器不会自动安装插件，请下载 zip 文件并通过 Chrome 开发者模式手动加载。',
+      extensionInstallSteps: ['下载 chat-witness 插件 zip 压缩包', '解压到本地固定目录，不要直接删除该目录', '打开 Chrome 扩展程序页面并开启开发者模式', '点击“加载已解压的扩展程序”，选择解压后的目录'],
       faqTitle: '常见问题',
       faqs: [
         { question: '会公开我的对话内容吗？', answer: '不会。内容先加密后再上传，链上只保存可验证的见证信息。' },
@@ -101,7 +116,6 @@ const dictionaries: Record<Locale, Dictionary> = {
       records: '记录',
       empty: '还没有见证记录。',
       refresh: '刷新',
-      loadMore: '加载更多',
       openTx: '查看交易',
       downloadMarkdown: '下载 Markdown',
       downloadOriginal: '下载原始文件',
@@ -109,6 +123,16 @@ const dictionaries: Record<Locale, Dictionary> = {
       decrypting: '正在解密...',
       missingSealFields: '缺少 Seal 解密字段，无法打开该记录。',
       loginRequired: '请先登录以查看你的见证记录。',
+      tableTitle: '标题',
+      tablePlatform: '平台',
+      tableMessages: '消息数',
+      tableCreated: '创建时间',
+      tableWalrus: 'Walrus',
+      tableTransaction: '交易',
+      tableActions: '操作',
+      previousPage: '上一页',
+      nextPage: '下一页',
+      loadingPage: '加载中...',
     },
   },
   en: {
@@ -123,7 +147,7 @@ const dictionaries: Record<Locale, Dictionary> = {
     landing: {
       badge: 'AI conversation witness layer on Sui + Walrus',
       heroTitle: 'Create trusted witnesses for your AI conversations',
-      heroSubtitle: 'Sui-Seal automatically preserves key conversations from ChatGPT, Claude, Gemini, and Kimi with verifiable records on Sui and Walrus.',
+      heroSubtitle: 'chat-witness automatically preserves key conversations from ChatGPT, Claude, Gemini, and Kimi with verifiable records on Sui and Walrus.',
       primaryCta: 'Install Chrome extension',
       secondaryCta: 'Open dashboard',
       valueTitle: 'Why witness conversations',
@@ -142,6 +166,9 @@ const dictionaries: Record<Locale, Dictionary> = {
       platformsTitle: 'Supports ChatGPT, Claude, Gemini, and Kimi',
       installTitle: 'Start in three steps',
       installSteps: ['Install the browser extension', 'Connect your wallet and sign in', 'Click the witness button on an AI conversation page'],
+      extensionInstallTitle: 'Install after downloading the extension zip',
+      extensionInstallDescription: 'If the browser does not install it automatically, download the zip file and load it manually through Chrome developer mode.',
+      extensionInstallSteps: ['Download the chat-witness extension zip file', 'Unzip it into a stable local folder and keep that folder', 'Open the Chrome extensions page and enable Developer mode', 'Click “Load unpacked” and select the unzipped folder'],
       faqTitle: 'FAQ',
       faqs: [
         { question: 'Will my conversation be public?', answer: 'No. Content is encrypted before upload, and only verifiable witness metadata is stored on-chain.' },
@@ -160,7 +187,6 @@ const dictionaries: Record<Locale, Dictionary> = {
       records: 'Records',
       empty: 'No witness records yet.',
       refresh: 'Refresh',
-      loadMore: 'Load more',
       openTx: 'Open transaction',
       downloadMarkdown: 'Download Markdown',
       downloadOriginal: 'Download original',
@@ -168,6 +194,16 @@ const dictionaries: Record<Locale, Dictionary> = {
       decrypting: 'Decrypting...',
       missingSealFields: 'Missing Seal decrypt fields, so this record cannot be opened.',
       loginRequired: 'Sign in first to view your witness records.',
+      tableTitle: 'Title',
+      tablePlatform: 'Platform',
+      tableMessages: 'Messages',
+      tableCreated: 'Created',
+      tableWalrus: 'Walrus',
+      tableTransaction: 'Transaction',
+      tableActions: 'Actions',
+      previousPage: 'Previous',
+      nextPage: 'Next',
+      loadingPage: 'Loading...',
     },
   },
 };
