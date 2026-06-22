@@ -3,6 +3,7 @@ import { ConnectButton, useCurrentAccount, useSignAndExecuteTransaction, useSign
 import { Transaction } from '@mysten/sui/transactions';
 import { fromBase64 } from '@mysten/sui/utils';
 import { createEncryptedMarkdownFile, createSealSessionKey, createStorageClient, conversationToMarkdown, decryptMarkdown, downloadMarkdownFile, downloadStoredFile, encryptMarkdown, safeMarkdownFilename, WALRUS_STORAGE_EPOCHS } from './storage';
+import logoUrl from '../assets/Chat-Witness-logo.png';
 
 const PACKAGE_ID = import.meta.env.VITE_SEAL_PACKAGE_ID;
 const CLIENT_VERSION = '0.1.0';
@@ -139,22 +140,22 @@ export default function SignerApp() {
   const [status, setStatus] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [digest, setDigest] = useState<string | null>(null);
   const [isWitnessing, setIsWitnessing] = useState(false);
-  const [witnessButtonText, setWitnessButtonText] = useState('加密并完成存证');
+  const [witnessButtonText, setWitnessButtonText] = useState('Encrypt and witness');
   const [isDecrypting, setIsDecrypting] = useState(false);
 
   async function completeWitnessFlow() {
     if (!payload) {
-      setStatus({ type: 'error', text: '签名参数无效，请从插件重新打开此页面' });
+      setStatus({ type: 'error', text: 'Invalid signing parameters. Please reopen this page from the extension.' });
       return;
     }
 
     if (!witnessPayload) {
-      setStatus({ type: 'error', text: '当前页面不是存证模式，请从插件重新打开' });
+      setStatus({ type: 'error', text: 'This page is not in witness mode. Please reopen it from the extension.' });
       return;
     }
 
     if (!currentAccount) {
-      setStatus({ type: 'error', text: '请先连接钱包' });
+      setStatus({ type: 'error', text: 'Connect your wallet first' });
       return;
     }
 
@@ -162,8 +163,8 @@ export default function SignerApp() {
     setIsWitnessing(true);
 
     try {
-      setWitnessButtonText('正在 Seal 加密...');
-      setStatus({ type: 'info', text: '正在 Seal 加密...' });
+      setWitnessButtonText('Seal encryption in progress...');
+      setStatus({ type: 'info', text: 'Seal encryption in progress...' });
       const markdown = conversationToMarkdown({
         title: witnessPayload.conversationTitle,
         url: witnessPayload.conversationUrl,
@@ -177,8 +178,8 @@ export default function SignerApp() {
       const encoded = await flow.encode();
       const storageStartAt = new Date().toISOString();
 
-      setWitnessButtonText('请确认 Walrus 存储注册交易...');
-      setStatus({ type: 'info', text: '请确认 Walrus 存储注册交易...' });
+      setWitnessButtonText('Confirm the Walrus storage registration transaction...');
+      setStatus({ type: 'info', text: 'Confirm the Walrus storage registration transaction...' });
       const registerTx = flow.register({
         epochs: WALRUS_STORAGE_EPOCHS,
         deletable: true,
@@ -194,12 +195,12 @@ export default function SignerApp() {
         throw new Error('Wallet did not return Walrus registration digest');
       }
 
-      setWitnessButtonText('正在上传到 Walrus...');
-      setStatus({ type: 'info', text: '正在上传到 Walrus...' });
+      setWitnessButtonText('Uploading to Walrus...');
+      setStatus({ type: 'info', text: 'Uploading to Walrus...' });
       await flow.upload({ digest: registerDigest });
 
-      setWitnessButtonText('请确认 Walrus 认证交易...');
-      setStatus({ type: 'info', text: '请确认 Walrus 认证交易...' });
+      setWitnessButtonText('Confirm the Walrus certification transaction...');
+      setStatus({ type: 'info', text: 'Confirm the Walrus certification transaction...' });
       const certifyTx = flow.certify();
       const certifyResult = await signAndExecuteTransaction.mutateAsync({
         transaction: certifyTx,
@@ -214,8 +215,8 @@ export default function SignerApp() {
       const files = await flow.listFiles();
       const walrusBlobId = files[0]?.id || encoded.blobId;
 
-      setWitnessButtonText('请确认 Sui 链上存证交易...');
-      setStatus({ type: 'info', text: '请确认 Sui 链上存证交易...' });
+      setWitnessButtonText('Confirm the Sui on-chain witness transaction...');
+      setStatus({ type: 'info', text: 'Confirm the Sui on-chain witness transaction...' });
       const tx = new Transaction();
       tx.moveCall({
         target: `${PACKAGE_ID}::witness::create_witness`,
@@ -239,11 +240,11 @@ export default function SignerApp() {
       }
 
       if (!witnessResult.witnessObjectId) {
-        throw new Error('未能获取链上 WitnessRecord 对象 ID，无法支持后续 Seal 解密');
+        throw new Error('Could not get the on-chain WitnessRecord object ID, so later Seal decryption is unavailable');
       }
 
-      setWitnessButtonText('正在更新插件记录...');
-      setStatus({ type: 'info', text: '正在更新插件记录...' });
+      setWitnessButtonText('Updating extension record...');
+      setStatus({ type: 'info', text: 'Updating extension record...' });
 
       await sendResult(witnessPayload.extensionId, {
         type: 'SUI_SEAL_WITNESS_SIGNED',
@@ -260,13 +261,13 @@ export default function SignerApp() {
       });
 
       setDigest(txDigest);
-      setStatus({ type: 'success', text: '加密文件已保存到 Walrus，链上存证和插件记录已更新' });
-      setWitnessButtonText('已完成');
+      setStatus({ type: 'success', text: 'Encrypted file saved to Walrus. On-chain witness and extension record updated.' });
+      setWitnessButtonText('Completed');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '签名失败';
+      const message = error instanceof Error ? error.message : 'Signing failed';
       console.error('Witness flow failed:', error);
       setStatus({ type: 'error', text: message });
-      setWitnessButtonText('加密并完成存证');
+      setWitnessButtonText('Encrypt and witness');
 
       if (witnessPayload) {
         sendResult(witnessPayload.extensionId, {
@@ -282,22 +283,22 @@ export default function SignerApp() {
 
   async function decryptAndDownloadMarkdown() {
     if (!decryptPayload) {
-      setStatus({ type: 'error', text: '解密参数无效，请从插件重新打开此页面' });
+      setStatus({ type: 'error', text: 'Invalid decrypt parameters. Please reopen this page from the extension.' });
       return;
     }
 
     if (!currentAccount) {
-      setStatus({ type: 'error', text: '请先连接拥有 WitnessRecord 的钱包' });
+      setStatus({ type: 'error', text: 'Connect the wallet that owns this WitnessRecord first' });
       return;
     }
 
     setIsDecrypting(true);
     try {
-      setStatus({ type: 'info', text: '正在下载 Walrus 加密文件...' });
+      setStatus({ type: 'info', text: 'Downloading encrypted Walrus file...' });
       const encryptedBytes = await downloadStoredFile(decryptPayload.walrusBlobId);
       const sessionKey = await createSealSessionKey(currentAccount.address);
 
-      setStatus({ type: 'info', text: '请在钱包中签名 Seal 会话授权消息...' });
+      setStatus({ type: 'info', text: 'Sign the Seal session authorization message in your wallet...' });
       const signature = await signPersonalMessage.mutateAsync({
         message: sessionKey.getPersonalMessage(),
         account: currentAccount,
@@ -305,7 +306,7 @@ export default function SignerApp() {
       });
       await sessionKey.setPersonalMessageSignature(signature.signature);
 
-      setStatus({ type: 'info', text: '正在请求 Seal key server 授权并解密 Markdown...' });
+      setStatus({ type: 'info', text: 'Requesting Seal key server authorization and decrypting Markdown...' });
       const markdown = await decryptMarkdown({
         encryptedBytes,
         conversationHash: decryptPayload.conversationHash,
@@ -315,9 +316,9 @@ export default function SignerApp() {
       });
 
       downloadMarkdownFile(markdown, safeMarkdownFilename(decryptPayload.conversationTitle));
-      setStatus({ type: 'success', text: '已解密并开始下载 Markdown 文件' });
+      setStatus({ type: 'success', text: 'Markdown decrypted and download started.' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : '解密失败';
+      const message = error instanceof Error ? error.message : 'Decryption failed';
       console.error('Decrypt failed:', error);
       setStatus({ type: 'error', text: message });
     } finally {
@@ -326,59 +327,77 @@ export default function SignerApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-xl">
-        <div className="text-center mb-6">
-          <div className="text-4xl mb-2">🦭</div>
-          <h1 className="text-2xl font-bold text-gray-800">Sui-Seal 钱包签名</h1>
-          <p className="text-sm text-gray-500 mt-2">
-            {decryptPayload ? '连接钱包，授权 Seal 解密并还原 Markdown 文件' : '连接钱包，加密对话并保存到 Walrus 后完成 Sui Testnet 存证'}
-          </p>
-        </div>
+    <div className="flex min-h-screen items-center justify-center overflow-hidden bg-[#070711] px-5 py-8 text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(226,61,124,0.34),transparent_34%),radial-gradient(circle_at_82%_18%,rgba(99,102,241,0.2),transparent_30%),linear-gradient(180deg,#080814_0%,#10101d_52%,#070711_100%)]" />
+      <div
+        className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] [mask-image:linear-gradient(to_bottom,black,transparent_84%)]"
+        style={{ backgroundSize: '44px 44px' }}
+      />
 
-        <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
+      <div className="relative w-full max-w-xl">
+        <header className="mb-6 flex items-center gap-3">
+          <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white shadow-[0_0_34px_rgba(226,61,124,0.38)]">
+            <img src={logoUrl} alt="chat-witness logo" className="h-full w-full object-cover" />
+          </div>
+          <div>
+            <div className="text-sm font-black uppercase tracking-[0.22em] text-white">chat-witness</div>
+            <div className="text-xs font-semibold text-white/52">Wallet signature gateway</div>
+          </div>
+        </header>
+
+        <section className="mb-5 border border-white/10 bg-white/[0.06] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.3)] backdrop-blur">
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#ff8fbd]">
+            {decryptPayload ? 'Seal decrypt' : 'Sui witness'}
+          </p>
+          <h1 className="mt-3 text-3xl font-black tracking-[-0.05em] text-white">Wallet signature</h1>
+          <p className="mt-3 text-sm leading-6 text-white/62">
+            {decryptPayload ? 'Connect your wallet, authorize Seal decryption, and restore the Markdown file.' : 'Connect your wallet, encrypt the conversation, store it on Walrus, and complete the Sui Testnet witness.'}
+          </p>
+        </section>
+
+        <div className="space-y-4 border border-white/10 bg-white/[0.06] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur">
           {!payload ? (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">
-              未找到签名参数，请回到插件重新打开此页面。
+            <div className="border border-red-400/30 bg-red-500/10 p-3 text-sm font-bold text-red-200">
+              No signing parameters found. Please reopen this page from the extension.
             </div>
           ) : (
             <>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="text-sm font-medium text-blue-800 mb-2">
-                  {decryptPayload ? '待解密文件' : '待存证内容'}
+              <div className="border border-brand/25 bg-brand/10 p-4">
+                <div className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#ff8fbd]">
+                  {decryptPayload ? 'File to decrypt' : 'Content to witness'}
                 </div>
-                <div className="text-xs text-blue-700 space-y-1">
+                <div className="space-y-2 text-xs leading-5 text-white/68">
                   {witnessPayload && (
                     <>
-                      <div>平台: {witnessPayload.platform}</div>
-                      <div>消息数: {witnessPayload.messageCount}</div>
-                      {witnessPayload.conversationTitle && <div>标题: {witnessPayload.conversationTitle}</div>}
-                      <div className="font-mono break-all">Hash: {witnessPayload.conversationHash}</div>
-                      <div>存储时长: 默认 1 个 Walrus epoch（约 1 个月）</div>
+                      <div><span className="font-bold text-white/82">Platform:</span> {witnessPayload.platform}</div>
+                      <div><span className="font-bold text-white/82">Messages:</span> {witnessPayload.messageCount}</div>
+                      {witnessPayload.conversationTitle && <div><span className="font-bold text-white/82">Title:</span> {witnessPayload.conversationTitle}</div>}
+                      <div className="break-all font-mono"><span className="font-sans font-bold text-white/82">Hash:</span> {witnessPayload.conversationHash}</div>
+                      <div><span className="font-bold text-white/82">Storage duration:</span> Default 1 Walrus epoch (about 1 month)</div>
                     </>
                   )}
                   {decryptPayload && (
                     <>
-                      {decryptPayload.platform && <div>平台: {decryptPayload.platform}</div>}
-                      {decryptPayload.conversationTitle && <div>标题: {decryptPayload.conversationTitle}</div>}
-                      <div className="font-mono break-all">Hash: {decryptPayload.conversationHash}</div>
-                      <div className="font-mono break-all">Walrus File: {decryptPayload.walrusBlobId}</div>
-                      <div className="font-mono break-all">Witness Object: {decryptPayload.suiObjectId}</div>
+                      {decryptPayload.platform && <div><span className="font-bold text-white/82">Platform:</span> {decryptPayload.platform}</div>}
+                      {decryptPayload.conversationTitle && <div><span className="font-bold text-white/82">Title:</span> {decryptPayload.conversationTitle}</div>}
+                      <div className="break-all font-mono"><span className="font-sans font-bold text-white/82">Hash:</span> {decryptPayload.conversationHash}</div>
+                      <div className="break-all font-mono"><span className="font-sans font-bold text-white/82">Walrus File:</span> {decryptPayload.walrusBlobId}</div>
+                      <div className="break-all font-mono"><span className="font-sans font-bold text-white/82">Witness Object:</span> {decryptPayload.suiObjectId}</div>
                     </>
                   )}
                 </div>
               </div>
 
               <div>
-                <div className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">钱包</div>
+                <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-white/48">Wallet</div>
                 <ConnectButton
-                  connectText="连接钱包"
-                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                  connectText="Connect wallet"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-brand/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)]"
                 />
                 {currentAccount && (
-                  <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
-                    <div className="text-xs font-medium text-green-700">已连接钱包</div>
-                    <div className="text-xs text-green-600 font-mono truncate mt-1" title={currentAccount.address}>
+                  <div className="mt-3 border border-emerald-400/30 bg-emerald-500/10 p-3">
+                    <div className="text-xs font-black uppercase tracking-[0.14em] text-emerald-200">Wallet connected</div>
+                    <div className="mt-1 truncate font-mono text-xs text-emerald-100/75" title={currentAccount.address}>
                       {currentAccount.address}
                     </div>
                   </div>
@@ -389,9 +408,12 @@ export default function SignerApp() {
                 <button
                   onClick={completeWitnessFlow}
                   disabled={!currentAccount || isWitnessing || !!digest}
-                  className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                  className="w-full rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-brand/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)] disabled:cursor-not-allowed disabled:border-white/10 disabled:rounded-2xl disabled:bg-white/10 disabled:text-white/42 disabled:shadow-none disabled:ring-0 disabled:hover:translate-y-0"
                 >
-                  {digest ? '已完成' : witnessButtonText}
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <UploadIcon />
+                    <span>{digest ? 'Completed' : witnessButtonText}</span>
+                  </span>
                 </button>
               )}
 
@@ -399,34 +421,37 @@ export default function SignerApp() {
                 <button
                   onClick={decryptAndDownloadMarkdown}
                   disabled={!currentAccount || isDecrypting}
-                  className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                  className="w-full rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-brand/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)] disabled:cursor-not-allowed disabled:border-white/10 disabled:rounded-2xl disabled:bg-white/10 disabled:text-white/42 disabled:shadow-none disabled:ring-0 disabled:hover:translate-y-0"
                 >
-                  {isDecrypting ? '解密中...' : '授权解密并下载 Markdown'}
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <DownloadIcon />
+                    <span>{isDecrypting ? 'Decrypting...' : 'Authorize decrypt and download Markdown'}</span>
+                  </span>
                 </button>
               )}
             </>
           )}
 
           {status && (
-            <div className={`rounded-lg p-3 text-sm ${
+            <div className={`border p-3 text-sm font-bold ${
               status.type === 'error'
-                ? 'bg-red-50 border border-red-200 text-red-700'
+                ? 'border-red-400/30 bg-red-500/10 text-red-200'
                 : status.type === 'success'
-                  ? 'bg-green-50 border border-green-200 text-green-700'
-                  : 'bg-blue-50 border border-blue-200 text-blue-700'
+                  ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
+                  : 'border-brand/30 bg-brand/10 text-[#ffb4cf]'
             }`}>
               {status.text}
             </div>
           )}
 
           {digest && (
-            <div className="bg-gray-100 rounded-lg p-3 text-xs">
-              <div className="font-medium text-gray-600 mb-1">交易 Digest</div>
+            <div className="border border-white/10 bg-[#0b0b18]/70 p-3 text-xs">
+              <div className="mb-1 font-black uppercase tracking-[0.14em] text-white/48">Transaction Digest</div>
               <a
                 href={`https://suiscan.xyz/testnet/tx/${digest}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-mono text-blue-600 underline break-all"
+                className="break-all font-mono text-[#ff8fbd] underline transition hover:text-white"
               >
                 {digest}
               </a>
@@ -435,5 +460,21 @@ export default function SignerApp() {
         </div>
       </div>
     </div>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M12 16V5m0 0 4 4m-4-4-4 4M5 16v3h14v-3" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M12 5v11m0 0 4-4m-4 4-4-4M5 19h14" />
+    </svg>
   );
 }
