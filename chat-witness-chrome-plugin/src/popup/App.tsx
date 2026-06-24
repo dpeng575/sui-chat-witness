@@ -59,7 +59,6 @@ const aiPlatforms = [
 function App() {
   const { user, loading, signInWithGoogle, signOut } = useAuth();
   const [currentPlatform, setCurrentPlatform] = useState<string | null>(null);
-  const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isWitnessing, setIsWitnessing] = useState(false);
   const [witnessResult, setWitnessResult] = useState<any>(null);
@@ -95,53 +94,51 @@ function App() {
     await chrome.tabs.create({ url, active: true });
   }
 
-  async function extractConversation() {
+  async function getCurrentConversation() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) {
       showStatus('No active tab found', 'error');
-      return;
+      return null;
     }
 
+    const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractConversation' });
+    console.log('[Popup] Received response:', response);
+    if (response?.success && response.conversation) {
+      const nextConversation = response.conversation as Conversation;
+      return nextConversation;
+    }
+
+    showStatus(response?.error || 'Unable to extract conversation', 'error');
+    return null;
+  }
+
+  async function exportConversationToMarkdown(nextConversation: Conversation) {
+    console.log('[Popup] Exporting conversation:', nextConversation);
+    const markdown = conversationToMarkdown(nextConversation);
+    console.log('[Popup] Generated markdown:', markdown);
+    const filename = generateFilename(nextConversation);
+    downloadMarkdown(markdown, filename);
+  }
+
+  async function exportCurrentConversationToMarkdown() {
     setIsExtracting(true);
     setStatusMessage(null);
 
     try {
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractConversation' });
-      console.log('[Popup] Received response:', response);
-      if (response?.success && response.conversation) {
-        setConversation(response.conversation);
-        showStatus('Conversation extracted.', 'success');
-      } else {
-        showStatus(response?.error || 'Unable to extract conversation', 'error');
-      }
+      const nextConversation = await getCurrentConversation();
+      if (!nextConversation) return;
+
+      exportConversationToMarkdown(nextConversation);
+      showStatus('Conversation exported.', 'success');
     } catch (e) {
-      console.log('[Popup] Error:', e);
-      showStatus('Unable to connect to this page. Refresh and try again.', 'error');
+      console.log('[Popup] Export error:', e);
+      showStatus('Unable to export this conversation. Refresh and try again.', 'error');
     } finally {
       setIsExtracting(false);
     }
   }
 
-  async function exportToMarkdown() {
-    if (!conversation) {
-      showStatus('No conversation available to export', 'error');
-      return;
-    }
-
-    console.log('[Popup] Exporting conversation:', conversation);
-    const markdown = conversationToMarkdown(conversation);
-    console.log('[Popup] Generated markdown:', markdown);
-    const filename = generateFilename(conversation);
-    downloadMarkdown(markdown, filename);
-    showStatus('Conversation exported.', 'success');
-  }
-
-  async function witnessToChain() {
-    if (!conversation) {
-      showStatus('No conversation available to witness', 'error');
-      return;
-    }
-
+  async function openWitnessSigner(nextConversation: Conversation) {
     setIsWitnessing(true);
     setWitnessResult(null);
     setStatusMessage(null);
@@ -150,10 +147,10 @@ function App() {
       showStatus('Preparing witness...', 'success');
 
       const prepared = await prepareWitness(
-        conversation.messages,
-        conversation.platform,
-        conversation.title,
-        conversation.url,
+        nextConversation.messages,
+        nextConversation.platform,
+        nextConversation.title,
+        nextConversation.url,
       );
 
       if (!prepared.success || !prepared.witnessRecordId || !prepared.walrusBlobId || !prepared.conversationHash) {
@@ -168,11 +165,11 @@ function App() {
         witnessRecordId: prepared.witnessRecordId,
         conversationHash: prepared.conversationHash,
         walrusBlobId: prepared.walrusBlobId,
-        platform: conversation.platform,
-        conversationTitle: conversation.title,
-        conversationUrl: conversation.url,
-        messages: conversation.messages,
-        messageCount: conversation.messages.length,
+        platform: nextConversation.platform,
+        conversationTitle: nextConversation.title,
+        conversationUrl: nextConversation.url,
+        messages: nextConversation.messages,
+        messageCount: nextConversation.messages.length,
       };
 
       await chrome.tabs.create({
@@ -197,6 +194,24 @@ function App() {
       setIsWitnessing(false);
     }
   }
+
+  async function uploadCurrentConversationToWalrus() {
+    setIsExtracting(true);
+    setStatusMessage(null);
+
+    try {
+      const nextConversation = await getCurrentConversation();
+      if (!nextConversation) return;
+
+      await openWitnessSigner(nextConversation);
+    } catch (e) {
+      console.log('[Popup] Witness extraction error:', e);
+      showStatus('Unable to extract this conversation. Refresh and try again.', 'error');
+    } finally {
+      setIsExtracting(false);
+    }
+  }
+
 
   async function loadWitnessRecords(page: number) {
     setIsLoadingRecords(true);
@@ -333,47 +348,24 @@ function App() {
         <section className="space-y-3">
           <SectionTitle>Conversation actions</SectionTitle>
           <button
-            onClick={extractConversation}
+            onClick={exportCurrentConversationToMarkdown}
             disabled={isExtracting || !currentPlatform}
-            className="flex w-full items-center justify-center gap-2 border border-white/12 bg-white/[0.06] px-4 py-3 text-sm font-black text-white transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-45"
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-brand/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/42 disabled:shadow-none disabled:ring-0 disabled:hover:translate-y-0"
           >
-            <span>{isExtracting ? '...' : '↓'}</span>
-            {isExtracting ? 'Extracting...' : 'Extract current conversation'}
+            <DownloadIcon />
+            {isExtracting ? 'Extracting...' : 'Export as Markdown'}
           </button>
 
-          {conversation && (
-            <>
-              <button
-                onClick={exportToMarkdown}
-                className="flex w-full items-center justify-center gap-2 border border-white/12 bg-white/[0.06] px-4 py-3 text-sm font-black text-white transition hover:bg-white/[0.12]"
-              >
-                <MarkdownIcon />
-                Export Markdown
-              </button>
-
-              <div className="border border-white/10 bg-white/[0.05] p-3">
-                <div className="text-xs font-black uppercase tracking-[0.14em] text-white/42">Extracted conversation</div>
-                <div className="mt-2 truncate text-sm font-bold text-white">{conversation.title}</div>
-                <div className="text-xs text-white/52">{conversation.messages.length} messages</div>
-              </div>
-            </>
-          )}
-        </section>
-
-        <section className="space-y-3">
-          <SectionTitle>Wallet signing</SectionTitle>
-          <div className="border border-brand/25 bg-brand/10 p-3 text-xs leading-5 text-white/68">
-            Wallet signing opens in a normal HTTP page so Sui Wallet / Slush can inject correctly.
-          </div>
           <button
-            onClick={witnessToChain}
-            disabled={!conversation || isWitnessing}
-            className="flex w-full items-center justify-center gap-2 bg-brand px-4 py-3 text-sm font-black text-white shadow-[0_18px_52px_rgba(226,61,124,0.34)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
+            onClick={uploadCurrentConversationToWalrus}
+            disabled={isExtracting || isWitnessing || !currentPlatform}
+            className="flex w-full items-center justify-center gap-3 rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-brand/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/42 disabled:shadow-none disabled:ring-0 disabled:hover:translate-y-0"
           >
-            <span>{isWitnessing ? '...' : '◇'}</span>
-            {isWitnessing ? 'Preparing witness...' : 'Open wallet signing page'}
+            <UploadIcon />
+            {isWitnessing ? 'Preparing...' : isExtracting ? 'Extracting...' : 'Upload to Walrus'}
           </button>
         </section>
+
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
@@ -552,10 +544,18 @@ function CaptureIcon() {
   );
 }
 
-function MarkdownIcon() {
+function DownloadIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
-      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16v12H4zM7 15V9l3 3 3-3v6m4-6v6m-2-2 2 2 2-2" />
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M12 5v11m0 0 4-4m-4 4-4-4M5 19h14" />
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+      <path fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" d="M12 16V5m0 0 4 4m-4-4-4 4M5 16v3h14v-3" />
     </svg>
   );
 }
