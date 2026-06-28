@@ -139,4 +139,3 @@ export async function getUserActivity(): Promise<UserActivity[]> {
   }
   return data;
 }
-

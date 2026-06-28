@@ -8,7 +8,7 @@ import { downloadFromWalrus, downloadWalrusBlob } from '../lib/walrus';
 import type { Conversation } from '../adapters/interface';
 import logoUrl from '../assets/Chat-Witness-logo.png';
 
-const SIGNER_URL = import.meta.env.VITE_SIGNER_URL || 'http://localhost:5173/signer.html';
+const SIGNER_URL = import.meta.env.VITE_SIGNER_URL || 'http://localhost:3000/en/signer';
 const RECORDS_PAGE_SIZE = 5;
 
 const aiPlatforms = [

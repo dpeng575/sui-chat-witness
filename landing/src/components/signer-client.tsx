@@ -1,11 +1,24 @@
+'use client';
+
 import { useMemo, useState } from 'react';
 import { ConnectButton, useCurrentAccount, useSignAndExecuteTransaction, useSignPersonalMessage } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
 import { fromBase64 } from '@mysten/sui/utils';
-import { createEncryptedMarkdownFile, createSealSessionKey, createStorageClient, conversationToMarkdown, decryptMarkdown, downloadMarkdownFile, downloadStoredFile, encryptMarkdown, safeMarkdownFilename, WALRUS_STORAGE_EPOCHS } from './storage';
-import logoUrl from '../assets/Chat-Witness-logo.png';
 
-const PACKAGE_ID = import.meta.env.VITE_SEAL_PACKAGE_ID;
+import { publicConfig } from '@/lib/config';
+import {
+  createEncryptedMarkdownFile,
+  createSealSessionKey,
+  createStorageClient,
+  conversationToMarkdown,
+  decryptMarkdown,
+  downloadMarkdownFile,
+  downloadStoredFile,
+  encryptMarkdown,
+  safeMarkdownFilename,
+  WALRUS_STORAGE_EPOCHS,
+} from '@/lib/storage';
+
 const CLIENT_VERSION = '0.1.0';
 
 type WitnessSignerPayload = {
@@ -42,18 +55,6 @@ type WitnessTransactionResult = {
   witnessObjectId?: string;
 };
 
-
-function hexToBytes(hex: string): Uint8Array {
-  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(cleanHex.length / 2);
-
-  for (let i = 0; i < cleanHex.length; i += 2) {
-    bytes[i / 2] = parseInt(cleanHex.slice(i, i + 2), 16);
-  }
-
-  return bytes;
-}
-
 type TransactionWithCreatedObjects = {
   objectTypes?: Record<string, string>;
   effects?: {
@@ -64,12 +65,58 @@ type TransactionWithCreatedObjects = {
   };
 };
 
+type ChromeRuntime = {
+  lastError?: { message?: string };
+  sendMessage: (
+    extensionId: string,
+    message: Record<string, unknown>,
+    callback: (response: unknown) => void,
+  ) => void;
+};
+
+type ChromeGlobal = typeof globalThis & {
+  chrome?: {
+    runtime?: ChromeRuntime;
+  };
+};
+
+async function debugToJSON(label: string, tx: Transaction) {
+  try {
+    const client = createStorageClient();
+    const json = await tx.toJSON({ client });
+    console.log(`[${label}] toJSON OK, length=${json.length}`);
+  } catch (error: unknown) {
+    const valiErr = error as { issues?: Array<Record<string, unknown>>; message?: string };
+    if (valiErr.issues) {
+      console.error(`[${label}] ValiError details:`, JSON.stringify(valiErr.issues, null, 2));
+    }
+    try {
+      const data = (tx as unknown as { getData?: () => unknown }).getData?.();
+      console.error(`[${label}] Transaction getData:`, JSON.stringify(data, (_k, v) => typeof v === 'bigint' ? v.toString() : v, 2));
+    } catch (getDataErr) {
+      console.error(`[${label}] getData also failed:`, getDataErr);
+    }
+  }
+}
+
+function hexToBytes(hex: string): number[] {
+  const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const bytes: number[] = [];
+
+  for (let i = 0; i < cleanHex.length; i += 2) {
+    bytes.push(parseInt(cleanHex.slice(i, i + 2), 16));
+  }
+
+  return bytes;
+}
+
 function findWitnessObjectId(result: unknown) {
   const transaction = (result as { Transaction?: TransactionWithCreatedObjects; FailedTransaction?: TransactionWithCreatedObjects }).Transaction
     ?? (result as { FailedTransaction?: TransactionWithCreatedObjects }).FailedTransaction;
   const objectTypes = transaction?.objectTypes || {};
+
   return transaction?.effects?.changedObjects.find((object) => {
-    return object.idOperation === 'Created' && objectTypes[object.objectId] === `${PACKAGE_ID}::witness::WitnessRecord`;
+    return object.idOperation === 'Created' && objectTypes[object.objectId] === `${publicConfig.sealPackageId}::witness::WitnessRecord`;
   })?.objectId;
 }
 
@@ -93,17 +140,23 @@ function isWitnessPayload(payload: SignerPayload): payload is WitnessSignerPaylo
   return payload.mode !== 'decrypt';
 }
 
+function getChromeRuntime(): ChromeRuntime | undefined {
+  return (globalThis as ChromeGlobal).chrome?.runtime;
+}
+
 function sendResult(extensionId: string, message: Record<string, unknown>) {
   return new Promise((resolve, reject) => {
-    if (!chrome?.runtime?.sendMessage) {
+    const runtime = getChromeRuntime();
+
+    if (!runtime?.sendMessage) {
       reject(new Error('Chrome runtime messaging is unavailable'));
       return;
     }
 
-    chrome.runtime.sendMessage(extensionId, message, (response) => {
-      const error = chrome.runtime.lastError;
+    runtime.sendMessage(extensionId, message, (response) => {
+      const error = runtime.lastError;
       if (error) {
-        reject(new Error(error.message));
+        reject(new Error(error.message || 'Chrome runtime messaging failed'));
         return;
       }
       resolve(response);
@@ -111,7 +164,7 @@ function sendResult(extensionId: string, message: Record<string, unknown>) {
   });
 }
 
-export default function SignerApp() {
+export function SignerClient() {
   const currentAccount = useCurrentAccount();
   const signAndExecuteTransaction = useSignAndExecuteTransaction<WitnessTransactionResult>({
     execute: async ({ bytes, signature }) => {
@@ -159,6 +212,11 @@ export default function SignerApp() {
       return;
     }
 
+    if (!publicConfig.sealPackageId) {
+      setStatus({ type: 'error', text: 'Seal package is not configured. Please check the landing environment variables.' });
+      return;
+    }
+
     setDigest(null);
     setIsWitnessing(true);
 
@@ -185,6 +243,7 @@ export default function SignerApp() {
         deletable: true,
         owner: currentAccount.address,
       });
+      await debugToJSON('registerTx', registerTx);
       const registerResult = await signAndExecuteTransaction.mutateAsync({
         transaction: registerTx,
         account: currentAccount,
@@ -202,6 +261,7 @@ export default function SignerApp() {
       setWitnessButtonText('Confirm the Walrus certification transaction...');
       setStatus({ type: 'info', text: 'Confirm the Walrus certification transaction...' });
       const certifyTx = flow.certify();
+      await debugToJSON('certifyTx', certifyTx);
       const certifyResult = await signAndExecuteTransaction.mutateAsync({
         transaction: certifyTx,
         account: currentAccount,
@@ -219,15 +279,16 @@ export default function SignerApp() {
       setStatus({ type: 'info', text: 'Confirm the Sui on-chain witness transaction...' });
       const tx = new Transaction();
       tx.moveCall({
-        target: `${PACKAGE_ID}::witness::create_witness`,
+        target: `${publicConfig.sealPackageId}::witness::create_witness`,
         arguments: [
-          tx.pure('vector<u8>', Array.from(hexToBytes(witnessPayload.conversationHash))),
-          tx.pure('string', walrusBlobId),
-          tx.pure('string', witnessPayload.platform),
-          tx.pure('string', CLIENT_VERSION),
+          tx.pure.vector('u8', hexToBytes(witnessPayload.conversationHash)),
+          tx.pure.string(walrusBlobId),
+          tx.pure.string(witnessPayload.platform),
+          tx.pure.string(CLIENT_VERSION),
         ],
       });
 
+      await debugToJSON('witnessTx', tx);
       const witnessResult = await signAndExecuteTransaction.mutateAsync({
         transaction: tx,
         account: currentAccount,
@@ -337,7 +398,7 @@ export default function SignerApp() {
       <div className="relative w-full max-w-xl">
         <header className="mb-6 flex items-center gap-3">
           <div className="h-12 w-12 overflow-hidden rounded-2xl border border-white/20 bg-white shadow-[0_0_34px_rgba(226,61,124,0.38)]">
-            <img src={logoUrl} alt="chat-witness logo" className="h-full w-full object-cover" />
+            <img src="/Chat-Witness-logo.png" alt="chat-witness logo" className="h-full w-full object-cover" />
           </div>
           <div>
             <div className="text-sm font-black uppercase tracking-[0.22em] text-white">chat-witness</div>
@@ -362,7 +423,7 @@ export default function SignerApp() {
             </div>
           ) : (
             <>
-              <div className="border border-brand/25 bg-brand/10 p-4">
+              <div className="border border-[#e23d7c]/25 bg-[#e23d7c]/10 p-4">
                 <div className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#ff8fbd]">
                   {decryptPayload ? 'File to decrypt' : 'Content to witness'}
                 </div>
@@ -392,7 +453,7 @@ export default function SignerApp() {
                 <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-white/48">Wallet</div>
                 <ConnectButton
                   connectText="Connect wallet"
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-brand/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)]"
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-[#e23d7c]/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)]"
                 />
                 {currentAccount && (
                   <div className="mt-3 border border-emerald-400/30 bg-emerald-500/10 p-3">
@@ -408,7 +469,7 @@ export default function SignerApp() {
                 <button
                   onClick={completeWitnessFlow}
                   disabled={!currentAccount || isWitnessing || !!digest}
-                  className="w-full rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-brand/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)] disabled:cursor-not-allowed disabled:border-white/10 disabled:rounded-2xl disabled:bg-white/10 disabled:text-white/42 disabled:shadow-none disabled:ring-0 disabled:hover:translate-y-0"
+                  className="w-full rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-[#e23d7c]/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/42 disabled:shadow-none disabled:ring-0 disabled:hover:translate-y-0"
                 >
                   <span className="inline-flex items-center justify-center gap-2">
                     <UploadIcon />
@@ -421,7 +482,7 @@ export default function SignerApp() {
                 <button
                   onClick={decryptAndDownloadMarkdown}
                   disabled={!currentAccount || isDecrypting}
-                  className="w-full rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-brand/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)] disabled:cursor-not-allowed disabled:border-white/10 disabled:rounded-2xl disabled:bg-white/10 disabled:text-white/42 disabled:shadow-none disabled:ring-0 disabled:hover:translate-y-0"
+                  className="w-full rounded-2xl border border-[#e23d7c] bg-[#e23d7c] px-5 py-4 text-sm font-black uppercase tracking-[0.12em] text-white shadow-[0_0_0_1px_rgba(255,255,255,0.12)_inset,0_20px_62px_rgba(226,61,124,0.56)] ring-2 ring-[#e23d7c]/30 transition hover:-translate-y-0.5 hover:bg-[#f04f8c] hover:shadow-[0_0_0_1px_rgba(255,255,255,0.2)_inset,0_26px_78px_rgba(226,61,124,0.68)] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/42 disabled:shadow-none disabled:ring-0 disabled:hover:translate-y-0"
                 >
                   <span className="inline-flex items-center justify-center gap-2">
                     <DownloadIcon />
@@ -438,7 +499,7 @@ export default function SignerApp() {
                 ? 'border-red-400/30 bg-red-500/10 text-red-200'
                 : status.type === 'success'
                   ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
-                  : 'border-brand/30 bg-brand/10 text-[#ffb4cf]'
+                  : 'border-[#e23d7c]/30 bg-[#e23d7c]/10 text-[#ffb4cf]'
             }`}>
               {status.text}
             </div>
@@ -448,7 +509,7 @@ export default function SignerApp() {
             <div className="border border-white/10 bg-[#0b0b18]/70 p-3 text-xs">
               <div className="mb-1 font-black uppercase tracking-[0.14em] text-white/48">Transaction Digest</div>
               <a
-                href={`https://suiscan.xyz/testnet/tx/${digest}`}
+                href={`${publicConfig.suiExplorerBaseUrl}/tx/${digest}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="break-all font-mono text-[#ff8fbd] underline transition hover:text-white"

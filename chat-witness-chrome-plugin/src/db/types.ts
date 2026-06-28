@@ -46,4 +46,3 @@ export interface UserActivity {
 }
 
 export type ActivityType = 'login' | 'export' | 'migrate' | 'witness';
-

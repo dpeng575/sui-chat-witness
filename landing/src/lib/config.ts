@@ -10,6 +10,7 @@ export const publicConfig = {
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean),
+  sealThreshold: Number(process.env.NEXT_PUBLIC_SEAL_THRESHOLD || '1'),
   walrusUploadRelayUrl:
     process.env.NEXT_PUBLIC_WALRUS_UPLOAD_RELAY_URL ||
     'https://upload-relay.testnet.walrus.space',

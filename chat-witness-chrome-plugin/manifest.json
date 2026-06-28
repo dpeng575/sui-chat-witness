@@ -13,7 +13,7 @@
     "https://prover.mystenlabs.com/*"
   ],
   "externally_connectable": {
-    "matches": ["http://localhost:5173/*"]
+    "matches": ["http://localhost:3000/*"]
   },
   "action": {
     "default_popup": "index.html",

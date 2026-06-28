@@ -1,8 +1,50 @@
 import { EncryptedObject, SealClient, SessionKey } from '@mysten/seal';
 import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { Transaction } from '@mysten/sui/transactions';
-import { walrus } from '@mysten/walrus';
+import { WalrusFile, walrus } from '@mysten/walrus';
 import { publicConfig } from './config';
+
+const WALRUS_WASM_URL = '/walrus/walrus_wasm_bg.wasm';
+
+export const WALRUS_STORAGE_EPOCHS = 1;
+
+type WeightedSealKeyServer = {
+  objectId: string;
+  weight: number;
+};
+
+export type ConversationForStorage = {
+  title?: string;
+  url?: string;
+  platform: string;
+  messages: Array<{
+    role: string;
+    content: string;
+    timestamp?: number;
+  }>;
+};
+
+export function conversationToMarkdown(conversation: ConversationForStorage): string {
+  let markdown = '';
+
+  if (conversation.title) {
+    markdown += `# ${conversation.title}\n\n`;
+  }
+
+  markdown += `> **Platform**: ${conversation.platform}\n`;
+  markdown += `> **URL**: ${conversation.url || ''}\n`;
+  markdown += `> **Exported**: ${new Date().toISOString()}\n\n`;
+  markdown += `---\n\n`;
+
+  for (const message of conversation.messages) {
+    const role = message.role === 'user' ? 'User' : 'Assistant';
+    markdown += `## ${role}\n\n`;
+    markdown += `${message.content}\n\n`;
+    markdown += `---\n\n`;
+  }
+
+  return markdown;
+}
 
 function normalizeHex(value: string): string {
   return value.startsWith('0x') ? value.slice(2).toLowerCase() : value.toLowerCase();
@@ -36,16 +78,25 @@ function parseEncryptedObjectMetadata(encryptedBytes: Uint8Array) {
   }
 }
 
-function getSealKeyServers() {
+function getSealKeyServers(): WeightedSealKeyServer[] {
   return publicConfig.sealKeyServers.map((objectId) => ({ objectId, weight: 1 }));
 }
 
-function createStorageClient() {
+function getSealThreshold(keyServers: WeightedSealKeyServer[]): number {
+  if (!Number.isInteger(publicConfig.sealThreshold) || publicConfig.sealThreshold < 1 || publicConfig.sealThreshold > keyServers.length) {
+    throw new Error(`Seal threshold is invalid: ${publicConfig.sealThreshold}. It must be between 1 and ${keyServers.length}.`);
+  }
+
+  return publicConfig.sealThreshold;
+}
+
+export function createStorageClient() {
   return new SuiGrpcClient({
     network: publicConfig.suiNetwork,
     baseUrl: 'https://fullnode.testnet.sui.io:443',
   }).$extend(
     walrus({
+      wasmUrl: WALRUS_WASM_URL,
       uploadRelay: {
         host: publicConfig.walrusUploadRelayUrl,
         sendTip: { max: 1_000 },
@@ -63,6 +114,31 @@ function createSealClient() {
   return new SealClient({
     suiClient: createStorageClient(),
     serverConfigs: keyServers,
+  });
+}
+
+export async function encryptMarkdown(markdown: string, encryptionId: string): Promise<Uint8Array> {
+  const keyServers = getSealKeyServers();
+  const sealClient = createSealClient();
+  const encoded = new TextEncoder().encode(markdown);
+  const { encryptedObject } = await sealClient.encrypt({
+    threshold: getSealThreshold(keyServers),
+    packageId: publicConfig.sealNamespacePackageId,
+    id: encryptionId,
+    data: encoded,
+  });
+
+  return encryptedObject;
+}
+
+export function createEncryptedMarkdownFile(encryptedMarkdown: Uint8Array, identifier: string) {
+  return WalrusFile.from({
+    contents: encryptedMarkdown,
+    identifier,
+    tags: {
+      'content-type': 'application/octet-stream',
+      'sui-seal-encrypted': 'true',
+    },
   });
 }
 
@@ -163,4 +239,21 @@ export async function decryptMarkdown({
     }
     throw error;
   }
+}
+
+export function downloadMarkdownFile(markdown: string, filename: string): void {
+  const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename.endsWith('.md') ? filename : `${filename}.md`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export function safeMarkdownFilename(value?: string): string {
+  const filename = (value || 'conversation').trim().replace(/[\\/:*?"<>|]/g, '-');
+  return filename || 'conversation';
 }
