@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm install && npm run build",
+  "buildCommand": "npm install --include=dev && npm run build",
   "installCommand": "echo 'skip root install'",
   "framework": "nextjs",
   "outputDirectory": "landing/.next"
