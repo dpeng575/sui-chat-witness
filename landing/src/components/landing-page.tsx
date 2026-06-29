@@ -133,7 +133,7 @@ export function LandingPage({
           <div className="mt-10 flex flex-col gap-4 sm:flex-row">
             <a
               className="inline-flex items-center justify-center rounded-full bg-brand px-7 py-4 text-base font-black text-white shadow-[0_18px_60px_rgba(226,61,124,0.42)] transition hover:-translate-y-1 hover:opacity-90"
-              href={publicConfig.extensionDownloadUrl}
+              href={publicConfig.extensionDownloadUrl} target="_blank"
             >
               {dictionary.landing.primaryCta}
             </a>
@@ -255,7 +255,7 @@ export function LandingPage({
             </h2>
             <a
               className="mt-8 inline-flex items-center justify-center bg-brand px-6 py-3 text-sm font-black uppercase tracking-[0.14em] text-white shadow-[0_18px_50px_rgba(226,61,124,0.35)] transition hover:-translate-y-0.5 hover:opacity-90"
-              href={publicConfig.extensionDownloadUrl}
+              href={publicConfig.extensionDownloadUrl} target="_blank"
             >
               {dictionary.landing.primaryCta}
             </a>
@@ -319,7 +319,7 @@ export function LandingPage({
             </h2>
             <a
               className="inline-flex shrink-0 items-center justify-center rounded-full bg-white px-7 py-4 text-base font-black text-[#070711] shadow-[0_20px_50px_rgba(7,7,17,0.24)] transition hover:-translate-y-1"
-              href={publicConfig.extensionDownloadUrl}
+              href={publicConfig.extensionDownloadUrl} target="_blank"
             >
               {dictionary.landing.finalCta}
             </a>

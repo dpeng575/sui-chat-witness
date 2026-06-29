@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Sui-Seal',
+  title: 'Chat Witness',
   description: 'Permanent AI conversation witness storage on Sui and Walrus.',
 };
 
